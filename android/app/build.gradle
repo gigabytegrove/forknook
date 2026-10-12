@@ -8,8 +8,8 @@ android {
         applicationId 'dev.recipebridge.mobile'
         minSdk 26
         targetSdk 35
-        versionCode 2
-        versionName '1.1.0'
+        versionCode 3
+        versionName '2.0.0'
     }
     buildTypes {
         release {
@@ -20,23 +20,4 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-}
-
-/**
- * Calden-style versioned APK produced by every debug build.
- * Keep the standard app-debug.apk, and also publish an unmistakable
- * versioned file under app/build/outputs/versioned/.
- */
-def importerApkVersion = android.defaultConfig.versionName
-
-def copyVersionedDebugApk = tasks.register('copyVersionedDebugApk', Copy) {
-    dependsOn('assembleDebug')
-    from(layout.buildDirectory.dir('outputs/apk/debug')) {
-        include('*.apk')
-        rename { "Recipe-Importer-v${importerApkVersion}-debug.apk" }
-    }
-    into(layout.buildDirectory.dir('outputs/versioned'))
-}
-tasks.matching { it.name == 'assembleDebug' }.configureEach {
-    finalizedBy(copyVersionedDebugApk)
 }
