@@ -145,11 +145,11 @@ private class ForknookApi(val origin: String, val token: String) {
         finally { c.disconnect() }
     }
 
-    suspend fun upload(context: Context, uri: Uri, mime: String): JSONObject =
+    suspend fun upload(context: Context, uri: Uri, mime: String, endpoint: String? = null): JSONObject =
         withContext(Dispatchers.IO) {
             val type = if (mime.startsWith("video/")) "preview-video" else "preview-image"
             val boundary = "Forknook" + System.nanoTime()
-            val c = connection("/imports/" + type, "POST", "multipart/form-data; boundary=" + boundary)
+            val c = connection(endpoint ?: "/imports/" + type, "POST", "multipart/form-data; boundary=" + boundary)
             c.doOutput = true
             c.setChunkedStreamingMode(16384)
             try {
@@ -211,7 +211,8 @@ private fun Input(value: String, onChange: (String) -> Unit, title: String,
 private fun ForknookApp(activity: ForknookActivity) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("forknook_native", Context.MODE_PRIVATE) }
-    var origin by remember { mutableStateOf(prefs.getString("server", "").orEmpty()) }
+    val legacyServer = remember { context.getSharedPreferences("forknook", Context.MODE_PRIVATE).getString("server", "").orEmpty() }
+    var origin by remember { mutableStateOf(prefs.getString("server", legacyServer).orEmpty()) }
     var token by remember { mutableStateOf(prefs.getString("session", "").orEmpty()) }
     var username by remember { mutableStateOf(prefs.getString("username", "").orEmpty()) }
     var password by remember { mutableStateOf("") }
@@ -500,6 +501,19 @@ private fun ForknookApp(activity: ForknookActivity) {
                                 Input(editIng,{editIng=it},"Ingredients, one per line",true)
                                 Input(editSteps,{editSteps=it},"Instructions, one step per line",true)
                                 Input(editPhoto,{editPhoto=it},"Photo URL")
+                                val choosePhoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri ->
+                                    if (uri != null) scope.launch {
+                                        busy = true
+                                        try {
+                                            val mediaType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                                            val result = api.upload(context, uri, mediaType, "/images/upload")
+                                            editPhoto = result.s("image_url")
+                                            message = "Recipe photograph uploaded"
+                                        } catch(e: Exception) { message = e.message.orEmpty() }
+                                        finally { busy = false }
+                                    }
+                                }
+                                OutlinedButton(onClick={choosePhoto.launch("image/*")}){Text("Upload recipe photograph")}
                                 Input(editNotes,{editNotes=it},"Notes",true)
                                 Button(onClick={
                                     val obj=JSONObject(draft.toString())
@@ -755,7 +769,12 @@ private fun ForknookApp(activity: ForknookActivity) {
                                         }
                                     }
                                 }
-                                OutlinedButton(onClick={signOut()},modifier=Modifier.fillMaxWidth()){Text("Sign out")}
+                                OutlinedButton(onClick={
+                                    scope.launch {
+                                        runCatching { api.call("/auth/logout","POST") }
+                                        signOut()
+                                    }
+                                },modifier=Modifier.fillMaxWidth()){Text("Sign out")}
                                 Text("Forknook Android 2.2.0-alpha · Kotlin native client",
                                     style=MaterialTheme.typography.labelSmall)
                             }
