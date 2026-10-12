@@ -237,6 +237,7 @@ private fun ForknookApp(activity: ForknookActivity) {
     var chosenRecipe by remember { mutableIntStateOf(0) }
     var chosenList by remember { mutableIntStateOf(0) }
     var roleInput by remember { mutableStateOf("contributor") }
+    var catalogProviders by remember { mutableStateOf(JSONArray()) }
     val scope = rememberCoroutineScope()
     val api = remember(origin, token) { ForknookApi(origin, token) }
     val canEdit = user?.s("role") in listOf("admin","approver","contributor")
@@ -287,6 +288,7 @@ private fun ForknookApp(activity: ForknookActivity) {
         if (token.isNotEmpty()) {
             val path = when(page) {
                 "Plan" -> "/meal-plan"
+                "Discover" -> "/discovery/providers"
                 "Shopping" -> "/shopping-lists"
                 "List" -> "/shopping-lists/" + chosenList
                 "Review" -> "/submissions?status=pending"
@@ -295,7 +297,11 @@ private fun ForknookApp(activity: ForknookActivity) {
                 "Family" -> "/family/settings"
                 else -> ""
             }
-            if (path.isNotEmpty()) try { payload = api.call(path) }
+            if (path.isNotEmpty()) try {
+                val result = api.call(path)
+                if (page=="Discover") { catalogProviders=result.asArray();payload=JSONArray() }
+                else payload=result
+            }
             catch (e: Exception) { message = e.message.orEmpty() }
         }
     }
@@ -676,13 +682,20 @@ private fun ForknookApp(activity: ForknookActivity) {
                             }
                         }
                         "Discover" -> {
-                            var provider by remember{mutableStateOf("themealdb")}
+                            var provider by remember{mutableStateOf("all")}
                             var mode by remember{mutableStateOf("name")}
                             Text("Discover recipes",style=MaterialTheme.typography.titleLarge)
                             Input(search,{search=it},"Recipe name or ingredient")
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                                listOf("themealdb","wikibooks").forEach{p->FilterChip(selected=provider==p,
-                                    onClick={provider=p},label={Text(if(p=="themealdb")"TheMealDB" else "Wikibooks")})}
+                                Row(Modifier.horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                    catalogProviders.objects().forEach { source ->
+                                        val id=source.s("id")
+                                        FilterChip(selected=provider==id,
+                                            onClick={provider=id},
+                                            label={Text(source.s("name"))})
+                                    }
+                                }
                             }
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
                                 listOf("name","ingredient").forEach{m->FilterChip(selected=mode==m,
