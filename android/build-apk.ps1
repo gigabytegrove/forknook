@@ -5,20 +5,56 @@ $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 Set-Location $Root
 
-if (-not $env:ANDROID_HOME) {
-    $env:ANDROID_HOME = Join-Path $env:LOCALAPPDATA "Android\Sdk"
+# Reuse the same SDK/JDK environment as Calden. The installed SDK does
+# not have to contain API 35 ahead of time; install it on demand.
+$SdkCandidates = @(
+    $env:ANDROID_HOME,
+    $env:ANDROID_SDK_ROOT,
+    (Join-Path $env:LOCALAPPDATA "Android\Sdk")
+) | Where-Object { $_ -and (Test-Path $_ -PathType Container) } | Select-Object -Unique
+
+$Sdk = $SdkCandidates | Where-Object {
+    (Test-Path (Join-Path $_ "platforms")) -or
+    (Test-Path (Join-Path $_ "cmdline-tools"))
+} | Select-Object -First 1
+if (-not $Sdk) {
+    throw "Android SDK not found. Set ANDROID_HOME to the same SDK used by Calden."
 }
-$env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
-if (-not (Test-Path (Join-Path $env:ANDROID_HOME "platforms\android-35\android.jar"))) {
-    throw "Android SDK Platform 35 missing. Install API 35 through Android Studio SDK Manager."
-}
-if (-not $env:JAVA_HOME) {
+$env:ANDROID_HOME = $Sdk
+$env:ANDROID_SDK_ROOT = $Sdk
+
+if (-not $env:JAVA_HOME -or -not (Test-Path (Join-Path $env:JAVA_HOME "bin\javac.exe"))) {
     $StudioJdk = Join-Path $env:ProgramFiles "Android\Android Studio\jbr"
     if (Test-Path (Join-Path $StudioJdk "bin\javac.exe")) { $env:JAVA_HOME = $StudioJdk }
 }
 if (-not $env:JAVA_HOME -or -not (Test-Path (Join-Path $env:JAVA_HOME "bin\javac.exe"))) {
-    throw "JAVA_HOME must point to a JDK (Android Studio's JBR works)."
+    throw "JAVA_HOME must point to a JDK. Reuse the same JDK used by Calden."
 }
+
+$Platform35 = Join-Path $Sdk "platforms\android-35\android.jar"
+if (-not (Test-Path $Platform35)) {
+    Write-Host "Android SDK Platform 35 is missing; installing to the existing SDK..." -ForegroundColor Yellow
+
+    $SdkManager = Join-Path $Sdk "cmdline-tools\latest\bin\sdkmanager.bat"
+    if (-not (Test-Path $SdkManager)) {
+        $SdkManager = Get-ChildItem (Join-Path $Sdk "cmdline-tools") -Recurse -File -Filter "sdkmanager.bat" -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
+
+    if ($SdkManager -and (Test-Path $SdkManager)) {
+        & $SdkManager "--sdk_root=$Sdk" "platforms;android-35"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Android SDK Platform 35 installation failed. Review sdkmanager output above."
+        }
+    } else {
+        # Android Gradle Plugin can provision a missing SDK platform
+        # automatically when its license was already accepted.
+        Write-Host "SDK command-line manager not installed; Gradle will attempt to download Platform 35." -ForegroundColor Yellow
+    }
+}
+
+Write-Host "Android SDK: $Sdk"
+Write-Host "Java JDK: $env:JAVA_HOME"
 if (-not (Test-Path ".\gradlew.bat") -or -not (Test-Path ".\gradle\wrapper\gradle-wrapper.jar")) {
     throw "Gradle wrapper is missing. Run git pull --ff-only origin main."
 }
