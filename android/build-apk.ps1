@@ -11,7 +11,7 @@ if (-not $env:ANDROID_HOME -and -not $env:ANDROID_SDK_ROOT) {
 if (-not $env:ANDROID_HOME -and -not $env:ANDROID_SDK_ROOT) {
     throw 'Android SDK not found. Install Android Studio SDK Platform 35, then set ANDROID_HOME.'
 }
-$Cache = Join-Path $env:LOCALAPPDATA 'RecipeBridge\gradle'
+$Cache = Join-Path $env:LOCALAPPDATA 'RecipeImporter\gradle'
 New-Item -Path $Cache -ItemType Directory -Force | Out-Null
 $Archive = Join-Path $Cache "gradle-$Version-bin.zip"
 $Binary = Join-Path $Cache "gradle-$Version\bin\gradle.bat"
@@ -28,6 +28,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not initialize Gradle wrapper.' }
 & (Join-Path $Root 'gradlew.bat') --no-daemon :app:assembleDebug
 if ($LASTEXITCODE -ne 0) { throw 'APK compilation failed.' }
 $BuiltApk = Join-Path $Root 'app\build\outputs\apk\debug\app-debug.apk'
-$FinalApk = Join-Path $Root 'recipe-bridge-1.0.0-debug.apk'
+$FinalApk = Join-Path $Root 'recipe-importer-1.1.0-debug.apk'
 Copy-Item -Path $BuiltApk -Destination $FinalApk -Force
 Write-Host "APK created: $FinalApk" -ForegroundColor Green

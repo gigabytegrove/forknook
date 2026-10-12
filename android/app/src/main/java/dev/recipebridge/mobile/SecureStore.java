@@ -14,7 +14,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
-/** Encrypts bearer credentials and KO-Pellet session cookies under Android Keystore. */
+/** Encrypts the Recipe Importer session token under Android Keystore. */
 final class SecureStore {
     private static final String KEY_ALIAS = "recipe_bridge_secret_v1";
     private final SharedPreferences preferences;

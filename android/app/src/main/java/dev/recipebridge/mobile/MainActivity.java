@@ -14,9 +14,6 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.webkit.CookieManager;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -57,19 +54,19 @@ public final class MainActivity extends Activity {
 
     private LinearLayout root, configPanel, previewPanel;
     private ScrollView scroll;
-    private EditText serverInput, loginInput, passwordInput, videoServerInput, videoTokenInput, textInput;
+    private EditText serverInput, loginInput, passwordInput, textInput;
     private EditText titleEdit, descEdit, ingredientsEdit, stepsEdit, sourceEdit, servesEdit, prepEdit, cookEdit, totalEdit, notesEdit;
     private Spinner householdSpinner;
     private TextView status, previewInfo, sharedInfo;
     private Button parseButton, saveButton, settingsButton;
     private ProgressBar progress;
-    private String cookie = "";
+    private String token = "";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         preferences = getSharedPreferences("recipe_bridge_config", MODE_PRIVATE);
         secure = new SecureStore(this);
-        cookie = secure.get("pellet_cookie");
+        token = secure.get("access_token");
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
@@ -192,7 +189,7 @@ public final class MainActivity extends Activity {
         scroll.addView(root);
         setContentView(scroll);
 
-        add(root, label("RECIPE BRIDGE", 12, true, BLUE));
+        add(root, label("RECIPE IMPORTER", 12, true, BLUE));
         space(root, 7);
         add(root, label("Save recipes in a snap.", 25, true, INK));
         space(root, 6);
@@ -207,11 +204,11 @@ public final class MainActivity extends Activity {
 
         configPanel = card();
         cardToRoot(configPanel);
-        add(configPanel, label("KO-Pellet connection", 20, true, INK));
-        sectionLabel(configPanel, "KO-Pellet server URL");
-        serverInput = input("https://pellet.your-domain.com", false);
+        add(configPanel, label("Recipe Importer server", 20, true, INK));
+        sectionLabel(configPanel, "Server URL");
+        serverInput = input("https://recipes.your-domain.com", false);
         serverInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        serverInput.setText(pref("pellet_url"));
+        serverInput.setText(pref("server_url"));
         add(configPanel, serverInput);
         sectionLabel(configPanel, "Username");
         loginInput = input("KitchenOwl username", false);
@@ -223,31 +220,13 @@ public final class MainActivity extends Activity {
         passwordInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         add(configPanel, passwordInput);
         space(configPanel, 10);
-        Button loginButton = button("Connect with KitchenOwl login", true);
+        Button loginButton = button("Sign in with KitchenOwl", true);
         add(configPanel, loginButton);
         loginButton.setOnClickListener(v -> login());
         space(configPanel, 8);
-        Button webLogin = button("Sign in using KO-Pellet web page", false);
-        add(configPanel, webLogin);
-        webLogin.setOnClickListener(v -> browserLogin());
-        space(configPanel, 7);
         Button logout = button("Disconnect this phone", false);
         add(configPanel, logout);
         logout.setOnClickListener(v -> logout());
-        space(configPanel, 12);
-        add(configPanel, label("Optional: Instagram and video extraction", 17, true, INK));
-        space(configPanel, 4);
-        add(configPanel, label("Install the included Docker extractor on your network to read video speech and on-screen text. This is not required for regular recipe links, images, or pasted text.", 12, false, MUTED));
-        sectionLabel(configPanel, "Video extractor URL");
-        videoServerInput = input("http://your-server:8999", false);
-        videoServerInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        videoServerInput.setText(pref("video_url"));
-        add(configPanel, videoServerInput);
-        sectionLabel(configPanel, "Video extractor token");
-        videoTokenInput = input("Token from Docker .env", false);
-        videoTokenInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        videoTokenInput.setText(secure.get("video_token"));
-        add(configPanel, videoTokenInput);
         space(configPanel, 8);
         Button saveSettings = button("Save connection settings", false);
         add(configPanel, saveSettings);
@@ -353,11 +332,11 @@ public final class MainActivity extends Activity {
         if (idx >= 0) householdSpinner.setSelection(idx);
     }
 
-    private boolean hasLogin() { return !cookie.isEmpty() && !pref("pellet_url").isEmpty(); }
-    private String server() { return pref("pellet_url"); }
+    private boolean hasLogin() { return !token.isEmpty() && !pref("server_url").isEmpty(); }
+    private String server() { return pref("server_url"); }
     private void setStatus(String value) { status.setText(value); }
     private void info(String value) { previewInfo.setText(value); }
-    private void warn(String value) { new AlertDialog.Builder(this).setTitle("Recipe Bridge").setMessage(value).setPositiveButton("OK", null).show(); }
+    private void warn(String value) { new AlertDialog.Builder(this).setTitle("Recipe Importer").setMessage(value).setPositiveButton("OK", null).show(); }
 
     private void setBusy(boolean working, String message) {
         busy = working;
@@ -378,7 +357,7 @@ public final class MainActivity extends Activity {
                 if (message == null || message.trim().isEmpty()) message = e.getClass().getSimpleName();
                 final String failure = message;
                 runOnUiThread(() -> {
-                    if (e instanceof PelletApi.ApiException && ((PelletApi.ApiException) e).statusCode == 401) setStatus("Session expired. Reconnect in Settings.");
+                    if (e instanceof ImporterApi.ApiException && ((ImporterApi.ApiException) e).statusCode == 401) setStatus("Session expired. Reconnect in Settings.");
                     info("Import failed: " + failure);
                     warn(failure);
                 });
@@ -392,24 +371,21 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void storeCookie(String next) throws Exception {
-        secure.put("pellet_cookie", next);
-        cookie = next;
+    private void storeToken(String next) throws Exception {
+        secure.put("access_token", next);
+        token = next;
     }
 
     private void saveSettings() {
         try {
-            String base = PelletApi.normalizeBase(serverInput.getText().toString());
-            String video = videoServerInput.getText().toString().trim();
-            if (!video.isEmpty()) video = PelletApi.normalizeBase(video);
+            String base = ImporterApi.normalizeBase(serverInput.getText().toString());
             String old = server();
             if (!old.isEmpty() && !old.equals(base)) {
-                storeCookie("");
+                storeToken("");
                 householdIds.clear(); householdNames.clear(); updateHouseholds();
             }
-            preferences.edit().putString("pellet_url", base).putString("video_url", video)
+            preferences.edit().putString("server_url", base)
                     .putString("username", loginInput.getText().toString().trim()).apply();
-            secure.put("video_token", videoTokenInput.getText().toString().trim());
             setStatus(hasLogin() ? "Settings saved" : "Server saved. Sign in to continue.");
             info("Settings saved");
         } catch (Exception e) { warn(e.getMessage()); }
@@ -420,11 +396,12 @@ public final class MainActivity extends Activity {
         final String user = loginInput.getText().toString().trim();
         final String pass = passwordInput.getText().toString();
         if (server().isEmpty() || user.isEmpty() || pass.isEmpty()) { warn("Enter a server URL, username, and password."); return; }
-        job("Signing in to KO-Pellet…", () -> {
+        job("Signing in to Recipe Importer…", () -> {
             JSONObject request = new JSONObject().put("username", user).put("password", pass);
-            PelletApi.Result result = PelletApi.json(server(), "/api/auth/kitchenowl", "POST", request, "", "", 30000);
-            if (!result.json.optBoolean("success") || result.cookie == null) throw new Exception("Login did not return a KO-Pellet session. Confirm that native KitchenOwl login is enabled.");
-            storeCookie(result.cookie);
+            ImporterApi.Result result = ImporterApi.json(server(), "/api/auth/kitchenowl", "POST", request, "", 30000);
+            String newToken = result.json.optString("token", "");
+            if (!result.json.optBoolean("success") || newToken.isEmpty()) throw new Exception("Recipe Importer did not return a session. Check the KitchenOwl credentials.");
+            storeToken(newToken);
             runOnUiThread(() -> {
                 passwordInput.setText("");
                 setStatus("Signed in. Loading KitchenOwl households…");
@@ -434,47 +411,11 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void browserLogin() {
-        saveSettings();
-        if (server().isEmpty()) { warn("Enter the KO-Pellet server URL first."); return; }
-        WebView web = new WebView(this);
-        web.getSettings().setJavaScriptEnabled(true); // KO-Pellet's login page needs JS.
-        web.getSettings().setDomStorageEnabled(true);
-        web.getSettings().setAllowFileAccess(false);
-        web.getSettings().setAllowContentAccess(false);
-        web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        CookieManager.getInstance().setAcceptCookie(true);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Sign in to KO-Pellet")
-            .setView(web).setNegativeButton("Cancel", (d, w) -> web.destroy()).create();
-        web.setWebViewClient(new WebViewClient() {
-            @Override public void onPageFinished(WebView view, String url) {
-                String current = CookieManager.getInstance().getCookie(server());
-                if (current == null || !current.contains("ko_pellet_auth=")) return;
-                // Only a KO-Pellet origin cookie may be persisted; not IdP origin cookies.
-                job("Verifying browser login…", () -> {
-                    try {
-                        JSONObject check = PelletApi.json(server(), "/api/auth/status", "GET", null, current, "", 30000).json;
-                        if (!check.optBoolean("authenticated")) return;
-                        storeCookie(current);
-                        runOnUiThread(() -> {
-                            dialog.dismiss(); web.destroy();
-                            setStatus("Signed in using KO-Pellet");
-                            configPanel.setVisibility(View.GONE);
-                        });
-                        loadHouseholdsInternal();
-                    } catch (Exception ignored) { /* The user may still be finishing an IdP redirect. */ }
-                });
-            }
-        });
-        dialog.show();
-        web.loadUrl(server());
-    }
-
     private void logout() {
         if (hasLogin()) job("Disconnecting…", () -> {
-            try { PelletApi.json(server(), "/api/auth/logout", "POST", new JSONObject(), cookie, "", 30000); }
+            try { ImporterApi.json(server(), "/api/auth/logout", "POST", new JSONObject(), token, 30000); }
             catch (Exception ignored) { /* Always erase device credentials locally. */ }
-            storeCookie("");
+            storeToken("");
             runOnUiThread(() -> {
                 householdIds.clear(); householdNames.clear(); updateHouseholds();
                 setStatus("Disconnected"); configPanel.setVisibility(View.VISIBLE);
@@ -489,7 +430,7 @@ public final class MainActivity extends Activity {
     }
 
     private void loadHouseholdsInternal() throws Exception {
-        PelletApi.Result result = PelletApi.json(server(), "/api/kitchenowl/households", "GET", null, cookie, "", 30000);
+        ImporterApi.Result result = ImporterApi.json(server(), "/api/kitchenowl/households", "GET", null, token, 30000);
         JSONArray arr = result.json.optJSONArray("results");
         if (arr == null) throw new Exception("KitchenOwl did not return a household list");
         List<Integer> ids = new ArrayList<>();
@@ -531,48 +472,38 @@ public final class MainActivity extends Activity {
 
     private void parse(SharedItem item) {
         if (busy) { info("Another operation is in progress"); return; }
-        if (!hasLogin()) { warn("Sign in to KO-Pellet first."); configPanel.setVisibility(View.VISIBLE); return; }
+        if (!hasLogin()) { warn("Sign in to Recipe Importer first."); configPanel.setVisibility(View.VISIBLE); return; }
         if (item == null || (item.kind == SharedItem.Kind.TEXT && item.text.trim().isEmpty())) { warn("Share an item or paste a link or recipe text."); return; }
-        String videoBase = pref("video_url");
-        String videoToken = secure.get("video_token");
         job("Extracting recipe…", () -> {
             JSONObject parsed;
             String source = "";
             String category;
             if (item.kind == SharedItem.Kind.IMAGE) {
                 category = "image";
-                parsed = PelletApi.media(server(), "/api/parse/image", getContentResolver(), item.uri,
-                        mimeOf(item.uri, "image/jpeg"), cookie, "", 120000, IMAGE_MAX).json;
+                parsed = ImporterApi.media(server(), "/api/parse/image", getContentResolver(), item.uri,
+                        mimeOf(item.uri, "image/jpeg"), token, 120000, IMAGE_MAX).json;
             } else if (item.kind == SharedItem.Kind.VIDEO || (item.kind == SharedItem.Kind.URL && SharedItem.isInstagram(SharedItem.firstUrl(item.text)))) {
-                if (videoBase.isEmpty() || videoToken.isEmpty())
-                    throw new Exception("Instagram/video import needs the included Docker extractor. Configure its URL and token in Settings. You can also paste the recipe caption as text.");
-                JSONObject extracted;
                 if (item.kind == SharedItem.Kind.VIDEO) {
-                    extracted = PelletApi.media(videoBase, "/extract/video", getContentResolver(), item.uri,
-                            mimeOf(item.uri, "video/mp4"), "", videoToken, 900000, VIDEO_MAX).json;
+                    parsed = ImporterApi.media(server(), "/api/parse/video", getContentResolver(), item.uri,
+                            mimeOf(item.uri, "video/mp4"), token, 900000, VIDEO_MAX).json;
                 } else {
                     source = SharedItem.firstUrl(item.text);
-                    extracted = PelletApi.json(videoBase, "/extract/instagram", "POST",
-                            new JSONObject().put("url", source), "", videoToken, 900000).json;
+                    parsed = ImporterApi.json(server(), "/api/parse/instagram", "POST",
+                            new JSONObject().put("url", source), token, 900000).json;
                 }
-                String captured = extracted.optString("text", "");
-                if (captured.trim().isEmpty()) throw new Exception("No usable recipe text was extracted from this video.");
-                if (captured.length() > 47000) captured = captured.substring(0, 47000);
-                parsed = PelletApi.json(server(), "/api/parse/text", "POST",
-                        new JSONObject().put("text", captured), cookie, "", 120000).json;
                 category = item.kind == SharedItem.Kind.VIDEO ? "video" : "instagram";
             } else if (item.kind == SharedItem.Kind.URL) {
                 category = "url";
                 source = SharedItem.firstUrl(item.text);
-                parsed = PelletApi.json(server(), "/api/parse/url", "POST",
-                        new JSONObject().put("url", source), cookie, "", 90000).json;
+                parsed = ImporterApi.json(server(), "/api/parse/url", "POST",
+                        new JSONObject().put("url", source), token, 90000).json;
             } else {
                 category = "text";
-                parsed = PelletApi.json(server(), "/api/parse/text", "POST",
-                        new JSONObject().put("text", item.text), cookie, "", 120000).json;
+                parsed = ImporterApi.json(server(), "/api/parse/text", "POST",
+                        new JSONObject().put("text", item.text), token, 120000).json;
             }
             if (!source.isEmpty() && parsed.optString("source_url").isEmpty()) parsed.put("source_url", source);
-            parsed.put("source_type", category.equals("instagram") || category.equals("video") ? "text" : category);
+            parsed.put("source_type", category);
             final JSONObject complete = parsed;
             runOnUiThread(() -> showPreview(complete, category));
         });
@@ -691,7 +622,7 @@ public final class MainActivity extends Activity {
         result.put("tags", parsedRecipe == null ? new JSONArray() : parsedRecipe.optJSONArray("tags") == null ? new JSONArray() : parsedRecipe.getJSONArray("tags"));
         if (parsedRecipe != null && !parsedRecipe.isNull("image_url") && !parsedRecipe.optString("image_url").isEmpty()) result.put("image_url", parsedRecipe.getString("image_url"));
         result.put("confidence", parsedRecipe == null ? "low" : parsedRecipe.optString("confidence", "low"));
-        result.put("source_type", sourceKind.equals("video") || sourceKind.equals("instagram") ? "text" : sourceKind);
+        result.put("source_type", sourceKind);
         return result;
     }
 
@@ -705,8 +636,8 @@ public final class MainActivity extends Activity {
         String title = recipe.optString("title", "");
         job("Checking for duplicate recipes…", () -> {
             String encoded = java.net.URLEncoder.encode(title, "UTF-8");
-            JSONObject duplicates = PelletApi.json(server(), "/api/kitchenowl/check-duplicate/" + householdId + "?title=" + encoded,
-                    "GET", null, cookie, "", 30000).json;
+            JSONObject duplicates = ImporterApi.json(server(), "/api/kitchenowl/check-duplicate/" + householdId + "?title=" + encoded,
+                    "GET", null, token, 30000).json;
             runOnUiThread(() -> {
                 if (duplicates.optBoolean("has_duplicate")) {
                     new AlertDialog.Builder(this)
@@ -722,7 +653,7 @@ public final class MainActivity extends Activity {
     private void saveRecipe(int householdId, JSONObject recipe) {
         job("Saving recipe to KitchenOwl…", () -> {
             JSONObject payload = new JSONObject().put("recipe", recipe);
-            PelletApi.json(server(), "/api/kitchenowl/recipe/" + householdId, "POST", payload, cookie, "", 60000);
+            ImporterApi.json(server(), "/api/kitchenowl/recipe/" + householdId, "POST", payload, token, 60000);
             runOnUiThread(() -> {
                 parsedRecipe = null;
                 pendingShare = null;

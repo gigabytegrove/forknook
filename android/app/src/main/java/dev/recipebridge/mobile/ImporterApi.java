@@ -23,8 +23,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Network code: no external dependencies, no TLS bypass. Use from background threads. */
-final class PelletApi {
-    private PelletApi() {}
+final class ImporterApi {
+    private ImporterApi() {}
 
     static String normalizeBase(String raw) throws IOException {
         String base = raw == null ? "" : raw.trim();
@@ -43,12 +43,11 @@ final class PelletApi {
 
     static final class Result {
         final JSONObject json;
-        final String cookie;
-        Result(JSONObject json, String cookie) { this.json = json; this.cookie = cookie; }
+        Result(JSONObject json) { this.json = json; }
     }
 
-    static Result json(String base, String route, String method, JSONObject payload, String cookie, String bearer, int timeoutMs) throws Exception {
-        HttpURLConnection connection = open(base, route, method, cookie, bearer, timeoutMs);
+    static Result json(String base, String route, String method, JSONObject payload, String token, int timeoutMs) throws Exception {
+        HttpURLConnection connection = open(base, route, method, token, timeoutMs);
         try {
             if (payload != null) {
                 connection.setDoOutput(true);
@@ -61,9 +60,9 @@ final class PelletApi {
         } finally { connection.disconnect(); }
     }
 
-    static Result media(String base, String route, ContentResolver resolver, Uri uri, String mime, String cookie, String bearer, int timeoutMs, long maxBytes) throws Exception {
-        String boundary = "RecipeBridge_" + UUID.randomUUID();
-        HttpURLConnection connection = open(base, route, "POST", cookie, bearer, timeoutMs);
+    static Result media(String base, String route, ContentResolver resolver, Uri uri, String mime, String token, int timeoutMs, long maxBytes) throws Exception {
+        String boundary = "RecipeImporter_" + UUID.randomUUID();
+        HttpURLConnection connection = open(base, route, "POST", token, timeoutMs);
         try {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
@@ -86,7 +85,7 @@ final class PelletApi {
         } finally { connection.disconnect(); }
     }
 
-    private static HttpURLConnection open(String base, String route, String method, String cookie, String bearer, int timeout) throws Exception {
+    private static HttpURLConnection open(String base, String route, String method, String token, int timeout) throws Exception {
         URL url = new URL(normalizeBase(base) + route);
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
         con.setInstanceFollowRedirects(false);
@@ -94,9 +93,9 @@ final class PelletApi {
         con.setConnectTimeout(15000);
         con.setReadTimeout(timeout);
         con.setRequestProperty("Accept", "application/json");
-        con.setRequestProperty("User-Agent", "RecipeBridgeAndroid/1.0.0");
-        if (cookie != null && !cookie.isEmpty()) con.setRequestProperty("Cookie", cookie);
-        if (bearer != null && !bearer.isEmpty()) con.setRequestProperty("Authorization", "Bearer " + bearer);
+        con.setRequestProperty("User-Agent", "RecipeImporterAndroid/1.1.0");
+        
+        if (token != null && !token.isEmpty()) con.setRequestProperty("Authorization", "Bearer " + token);
         return con;
     }
 
@@ -116,15 +115,7 @@ final class PelletApi {
             if (body.trim().startsWith("[")) parsed.put("results", new JSONArray(body));
             else parsed = new JSONObject(body);
         }
-        String cookie = null;
-        Map<String, List<String>> headers = connection.getHeaderFields();
-        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-            if (entry.getKey() == null || !"set-cookie".equalsIgnoreCase(entry.getKey())) continue;
-            for (String value : entry.getValue()) {
-                if (value.startsWith("ko_pellet_auth=")) cookie = value.split(";", 2)[0];
-            }
-        }
-        return new Result(parsed, cookie);
+        return new Result(parsed);
     }
 
     private static String readLimited(InputStream stream, int limit) throws IOException {
