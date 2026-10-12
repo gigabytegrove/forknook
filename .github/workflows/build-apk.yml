@@ -1,0 +1,47 @@
+name: Build Recipe Bridge APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/app/**'
+      - 'android/build.gradle'
+      - 'android/settings.gradle'
+      - 'android/gradle.properties'
+      - 'android/gradle/wrapper/gradle-wrapper.properties'
+      - '.github/workflows/build-apk.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Android project directory
+        run: echo "GRADLE_ROOT=$GITHUB_WORKSPACE/android" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install required SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Generate official Gradle wrapper
+        working-directory: android
+        run: gradle --no-daemon wrapper --gradle-version 8.11.1
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:assembleDebug
+      - name: Version APK filename
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk recipe-bridge-1.0.0-debug.apk
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: recipe-bridge-1.0.0-debug
+          path: recipe-bridge-1.0.0-debug.apk
+          if-no-files-found: error
+          retention-days: 30
