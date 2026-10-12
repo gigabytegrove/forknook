@@ -151,7 +151,7 @@ private class ForknookApi(val origin: String, val token: String) {
             val boundary = "Forknook" + System.nanoTime()
             val c = connection("/imports/" + type, "POST", "multipart/form-data; boundary=" + boundary)
             c.doOutput = true
-            c.chunkedStreamingMode = 16384
+            c.setChunkedStreamingMode(16384)
             try {
                 c.outputStream.use { out ->
                     out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"shared\"\r\nContent-Type: " +
@@ -376,7 +376,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                             color=Color(0xFFE4EDE5), style=MaterialTheme.typography.labelMedium,maxLines=1,
                             overflow=TextOverflow.Ellipsis)
                     }
-                    TextButton(onClick={refresh}) {Text("Refresh",color=Color.White)}
+                    TextButton(onClick={refresh()}) {Text("Refresh",color=Color.White)}
                 }
             }}, bottomBar={NavigationBar(containerColor=Color.White) {
                 tabs.forEach { tab ->
