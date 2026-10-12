@@ -22,6 +22,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.ImageView;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -40,6 +41,8 @@ public final class ForknookActivity extends Activity {
     private String pendingText;
     private String origin = "";
 
+    private int dp(float dip) { return Math.round(dip * getResources().getDisplayMetrics().density); }
+
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("forknook", MODE_PRIVATE);
@@ -48,11 +51,18 @@ public final class ForknookActivity extends Activity {
         root.setBackgroundColor(Color.WHITE);
         final LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(20, 8, 14, 8);
+        header.setPadding(dp(16), dp(10), dp(12), dp(10));
+        ImageView brandIcon = new ImageView(this);
+        brandIcon.setImageResource(R.drawable.forknook_icon);
+        brandIcon.setContentDescription("Forknook");
+        brandIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams iconLayout = new LinearLayout.LayoutParams(dp(42), dp(42));
+        iconLayout.setMargins(0, 0, dp(9), 0);
+        header.addView(brandIcon, iconLayout);
         TextView title = new TextView(this);
         title.setText("Forknook"); title.setTextSize(21);
         title.setTypeface(null, 1);title.setTextColor(Color.rgb(27, 67, 46));
-        header.addView(title,new LinearLayout.LayoutParams(0,60,1));
+        header.addView(title,new LinearLayout.LayoutParams(0,dp(52),1));
         Button refresh = new Button(this);refresh.setText("Reload");
         header.addView(refresh);
         Button configure = new Button(this);configure.setText("Server");
@@ -157,7 +167,11 @@ public final class ForknookActivity extends Activity {
             pendingMedia = intent.getParcelableExtra(Intent.EXTRA_STREAM);
         } else {
             CharSequence sent=intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
-            if (sent!=null)pendingText=sent.toString().trim();
+            if (sent != null) {
+                String shared = sent.toString().trim();
+                String firstUrl = SharedItem.firstUrl(shared);
+                pendingText = firstUrl != null ? firstUrl : shared;
+            }
         }
     }
     @Override protected void onNewIntent(Intent intent) {

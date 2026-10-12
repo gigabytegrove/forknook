@@ -9,6 +9,7 @@ on:
       - 'android/settings.gradle'
       - 'android/gradle.properties'
       - 'android/gradle/wrapper/gradle-wrapper.properties'
+      - 'android/app/src/main/res/**'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -39,12 +40,19 @@ jobs:
       - name: Build debug APK
         working-directory: android
         run: ./gradlew --no-daemon :app:assembleDebug
-      - name: Version APK filename
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk Forknook-v2.0.0-debug.apk
+      - name: Version APK filename from Android app config
+        run: |
+          python - <<'PY'
+          import pathlib, re, shutil
+          config = pathlib.Path('android/app/build.gradle').read_text()
+          version = re.search(r"versionName\s+'([^']+)'", config).group(1)
+          shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk', f'Forknook-v{version}-debug.apk')
+          print('Created versioned APK:', version)
+          PY
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Forknook-v2.0.0-debug
-          path: Forknook-v2.0.0-debug.apk
+          name: Forknook-Android-debug
+          path: Forknook-v*-debug.apk
           if-no-files-found: error
           retention-days: 30
