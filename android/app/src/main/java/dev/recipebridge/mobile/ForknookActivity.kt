@@ -7,6 +7,8 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,9 +46,9 @@ import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-private val pine = Color(0xFF214D36)
+private val pine = Color(0xFF1E3F2D)
 private val paper = Color(0xFFFFFCF5)
-private val terracotta = Color(0xFFB76C50)
+private val terracotta = Color(0xFFDC543B)
 
 data class SharedRecipe(val text: String? = null, val file: Uri? = null, val mime: String = "")
 
@@ -55,6 +58,19 @@ class ForknookActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Android 15 enforces edge-to-edge. Use dark system bar icons on
+        // Forknook cream and explicitly consume window insets in Compose.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.rgb(255, 252, 245),
+                android.graphics.Color.rgb(255, 252, 245)
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.rgb(255, 252, 245),
+                android.graphics.Color.rgb(255, 252, 245)
+            )
+        )
+        window.decorView.setBackgroundColor(android.graphics.Color.rgb(255, 252, 245))
         incoming = readShare(intent)
         setContent { ForknookApp(this) }
     }
@@ -326,17 +342,33 @@ private fun ForknookApp(activity: ForknookActivity) {
         }
     }
 
-    val scheme = lightColorScheme(primary = pine, secondary = terracotta, background = paper,
-        surface = Color.White, onPrimary = Color.White)
+    val scheme = lightColorScheme(
+        primary = terracotta, secondary = pine,
+        background = paper, surface = Color.White,
+        onPrimary = Color.White, onSurface = Color(0xFF20382B)
+    )
 
     MaterialTheme(colorScheme = scheme) {
+      // The entire app receives safe drawing padding exactly once.
+      Surface(
+        modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
+        color = paper
+      ) {
         if (token.isBlank() || origin.isBlank()) {
             Column(Modifier.fillMaxSize().padding(26.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.Center) {
-                Text("Forknook", style = MaterialTheme.typography.headlineLarge,
-                    color = pine, fontWeight = FontWeight.Bold)
+                // Exact approved Forknook wordmark from the web application.
+                // Crop only its large blank top and bottom margins.
+                Surface(color = Color.White, shape = RoundedCornerShape(16.dp)) {
+                    Image(
+                        painter = painterResource(R.drawable.forknook_wordmark),
+                        contentDescription = "Forknook",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().height(124.dp)
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
-                Text("Your family's own kitchen", color = MaterialTheme.colorScheme.secondary)
+                Text("Your family's own kitchen", color = pine)
                 Spacer(Modifier.height(28.dp))
                 Input(serverInput, { serverInput = it }, "Forknook server URL")
                 Spacer(Modifier.height(10.dp))
@@ -375,25 +407,52 @@ private fun ForknookApp(activity: ForknookActivity) {
                 detail=null;editing=null
             }
             val tabs = listOf("Recipes","Plan","Shopping","More")
-            Scaffold(topBar={Surface(color=pine){
-                Row(Modifier.fillMaxWidth().height(66.dp).padding(horizontal=16.dp),
-                    verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.SpaceBetween) {
-                    Column {
-                        Text("Forknook", color=Color.White, style=MaterialTheme.typography.titleLarge, fontWeight=FontWeight.Bold)
-                        Text(if(page=="Recipe") detail?.s("title").orEmpty() else page,
-                            color=Color(0xFFE4EDE5), style=MaterialTheme.typography.labelMedium,maxLines=1,
-                            overflow=TextOverflow.Ellipsis)
+            Scaffold(
+              // Outer Surface already consumed the system bar insets.
+              contentWindowInsets = WindowInsets(0, 0, 0, 0),
+              topBar = {
+                Surface(color = Color.White, tonalElevation = 1.dp) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(70.dp)
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.forknook_wordmark),
+                            contentDescription = "Forknook — open recipes",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.width(184.dp).height(62.dp)
+                                .clickable { page = "Recipes"; detail = null; editing = null }
+                        )
+                        TextButton(onClick = { refresh() }) {
+                            Text("Refresh", color = pine)
+                        }
                     }
-                    TextButton(onClick={refresh()}) {Text("Refresh",color=Color.White)}
                 }
-            }}, bottomBar={NavigationBar(containerColor=Color.White) {
-                tabs.forEach { tab ->
-                    NavigationBarItem(selected=page==tab, onClick={
-                        page=tab;detail=null;editing=null;listDetail=null;message=""
-                    },icon={Text(when(tab){"Recipes"->"📖";"Plan"->"🗓";"Shopping"->"🛒";else->"☰"})},
-                        label={Text(tab)})
+              },
+              bottomBar = {
+                NavigationBar(
+                    containerColor = Color.White,
+                    windowInsets = WindowInsets(0, 0, 0, 0)
+                ) {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = page == tab,
+                            onClick = {
+                                page = tab; detail = null; editing = null
+                                listDetail = null; message = ""
+                            },
+                            icon = { Text(when(tab) {
+                                "Recipes" -> "📖"; "Plan" -> "🗓"
+                                "Shopping" -> "🛒"; else -> "☰"
+                            }) },
+                            label = { Text(tab) }
+                        )
+                    }
                 }
-            }}) { inner ->
+              }
+            ) { inner ->
                 Column(Modifier.fillMaxSize().padding(inner).padding(horizontal=14.dp, vertical=10.dp),
                     verticalArrangement=Arrangement.spacedBy(12.dp)) {
                     if(message.isNotBlank()) Surface(shape=RoundedCornerShape(12.dp),
@@ -789,7 +848,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                                         signOut()
                                     }
                                 },modifier=Modifier.fillMaxWidth()){Text("Sign out")}
-                                Text("Forknook Android 2.2.1 · Kotlin native client",
+                                Text("Forknook Android 2.2.2 · Kotlin native client",
                                     style=MaterialTheme.typography.labelSmall)
                             }
                         }
@@ -797,5 +856,6 @@ private fun ForknookApp(activity: ForknookActivity) {
                 }
             }
         }
+    }
     }
 }
