@@ -426,7 +426,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                 // Official RecipeCove cookbook emblem.
                 Surface(color = Color.White, shape = RoundedCornerShape(16.dp)) {
                     Image(
-                        painter = painterResource(R.drawable.recipecove_brand),
+                        painter = painterResource(R.drawable.recipecove_wordmark),
                         contentDescription = "RecipeCove",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxWidth().height(124.dp)
@@ -519,7 +519,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Image(
-                            painter = painterResource(R.drawable.recipecove_brand),
+                            painter = painterResource(R.drawable.recipecove_wordmark),
                             contentDescription = "RecipeCove — open recipes",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.width(184.dp).height(62.dp)
