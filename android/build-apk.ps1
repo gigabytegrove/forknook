@@ -1,4 +1,4 @@
-# Forknook local Windows APK build (Calden-style).
+# RecipeCove local Windows APK build (Calden-style).
 # Reuses the existing Android Studio SDK/JDK; installs missing API 35 when possible.
 # Produces a versioned APK and checks its identity, signature and SHA-256.
 $ErrorActionPreference = "Stop"
@@ -46,7 +46,7 @@ if (-not (Test-Path $Api35)) {
 $Gradle = Join-Path $Root 'gradlew.bat'
 $WrapperJar = Join-Path $Root 'gradle\wrapper\gradle-wrapper.jar'
 if (-not (Test-Path $Gradle) -or -not (Test-Path $WrapperJar)) {
-    throw 'Committed Gradle wrapper is missing. Pull the latest Forknook repository.'
+    throw 'Committed Gradle wrapper is missing. Pull the latest RecipeCove repository.'
 }
 
 $BuildGradle = Get-Content (Join-Path $Root 'app\build.gradle') -Raw
@@ -68,7 +68,7 @@ $Built = Join-Path $Root 'app\build\outputs\apk\debug\app-debug.apk'
 if (-not (Test-Path $Built)) { throw 'Gradle did not produce a debug APK.' }
 $OutDir = Join-Path $Root 'app\build\outputs\versioned'
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
-$Apk = Join-Path $OutDir "Forknook-v$AppVersion-debug.apk"
+$Apk = Join-Path $OutDir "RecipeCove-v$AppVersion-debug.apk"
 Copy-Item $Built $Apk -Force
 
 $BuildTools = @(Get-ChildItem (Join-Path $Sdk 'build-tools') -Directory -ErrorAction Stop |
