@@ -848,6 +848,33 @@ private fun ForknookApp(activity: ForknookActivity) {
                         "Discover" -> {
                             var provider by remember{mutableStateOf("all")}
                             var mode by remember{mutableStateOf("name")}
+                            var previewRecipe by remember { mutableStateOf<JSONObject?>(null) }
+                            previewRecipe?.let { draft ->
+                                AlertDialog(
+                                    onDismissRequest={previewRecipe=null},
+                                    title={Text(draft.s("title").ifBlank{"Recipe preview"})},
+                                    text={
+                                        Column(Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState()),
+                                            verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                                            if(draft.s("description").isNotBlank()) Text(draft.s("description"))
+                                            Text("Ingredients",fontWeight=FontWeight.Bold)
+                                            (draft.optJSONArray("ingredients")?:JSONArray()).objects().forEach{ingredient->
+                                                Text("• "+ingredient.s("raw").ifBlank{ingredient.s("name")})
+                                            }
+                                            Text("Directions",fontWeight=FontWeight.Bold)
+                                            val steps=draft.optJSONArray("instructions")?:JSONArray()
+                                            for(i in 0 until steps.length()) {
+                                                val step=steps.optString(i).trim()
+                                                if(step.isNotEmpty()) Text("${i+1}. $step")
+                                            }
+                                        }
+                                    },
+                                    confirmButton={
+                                        TextButton(onClick={previewRecipe=null;openEditor(draft)}){Text("Import recipe")}
+                                    },
+                                    dismissButton={TextButton(onClick={previewRecipe=null}){Text("Close")}}
+                                )
+                            }
                             Text("Discover recipes",style=MaterialTheme.typography.titleLarge)
                             Input(search,{search=it},"Recipe name or ingredient")
                             Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
@@ -874,12 +901,12 @@ private fun ForknookApp(activity: ForknookActivity) {
                                 items(payload.asArray().objects()){item->
                                     ElevatedCard(onClick={
                                         request("/discovery/preview?provider="+params(provider)+"&id="+params(item.s("id"))){
-                                            openEditor(it.asObject())
+                                            previewRecipe=it.asObject()
                                         }
                                     }) { Column(Modifier.fillMaxWidth().padding(16.dp)){
                                         Text(item.s("title").ifBlank{item.s("name")},fontWeight=FontWeight.Bold)
                                         Text(item.s("description"),maxLines=2)
-                                        Text("Preview and import",color=pine)
+                                        Text("View recipe",color=pine)
                                     }}
                                 }
                             }
