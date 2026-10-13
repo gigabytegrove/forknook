@@ -39,7 +39,7 @@ internal object SessionVault {
         val payload = cipher.iv + ciphertext
         check(prefs.edit()
             .putString(ENCRYPTED, Base64.encodeToString(payload, Base64.NO_WRAP))
-            .remove("session").commit()) { "Could not securely save the Forknook session" }
+            .remove("session").commit()) { "Could not securely save the RecipeCove session" }
     }
 
     fun load(context: Context): String {
