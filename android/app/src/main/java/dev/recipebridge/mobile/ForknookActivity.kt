@@ -65,14 +65,14 @@ private fun sharedDescription(share: SharedRecipe): String = when {
     else -> "Shared recipe text"
 }
 
-class ForknookActivity : ComponentActivity() {
+class RecipeCoveActivity : ComponentActivity() {
     var incoming by mutableStateOf<SharedRecipe?>(null)
         private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Android 15 enforces edge-to-edge. Use dark system bar icons on
-        // Forknook cream and explicitly consume window insets in Compose.
+        // RecipeCove cream and explicitly consume window insets in Compose.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(
                 android.graphics.Color.rgb(255, 252, 245),
@@ -85,7 +85,7 @@ class ForknookActivity : ComponentActivity() {
         )
         window.decorView.setBackgroundColor(android.graphics.Color.rgb(255, 252, 245))
         incoming = readShare(intent)
-        setContent { ForknookApp(this) }
+        setContent { RecipeCoveApp(this) }
     }
 
     @Suppress("DEPRECATION")
@@ -140,7 +140,7 @@ private fun checkedServer(input: String): String {
     require((uri.scheme == "https" || uri.scheme == "http") && !uri.host.isNullOrBlank()
         && uri.userInfo == null && uri.query == null && uri.fragment == null
         && (uri.path.isNullOrBlank() || uri.path == "/")) {
-        "Enter your Forknook base URL, such as https://recipes.example.com"
+        "Enter your RecipeCove base URL, such as https://recipes.example.com"
     }
     if (uri.scheme == "http") {
         val host = uri.host.lowercase()
@@ -152,8 +152,8 @@ private fun checkedServer(input: String): String {
     return uri.scheme + "://" + uri.authority
 }
 
-/** Calls only the user's selected Forknook server. Never calls KitchenOwl directly. */
-private class ForknookApi(val origin: String, val token: String) {
+/** Calls only the user's selected RecipeCove server. Never calls KitchenOwl directly. */
+private class RecipeCoveApi(val origin: String, val token: String) {
     private fun connection(path: String, method: String, mime: String): HttpURLConnection {
         val url = URL(origin + "/api/v2" + path)
         return (url.openConnection() as HttpURLConnection).apply {
@@ -206,7 +206,7 @@ private class ForknookApi(val origin: String, val token: String) {
     suspend fun upload(context: Context, uri: Uri, mime: String, endpoint: String? = null): JSONObject =
         withContext(Dispatchers.IO) {
             val type = if (mime.startsWith("video/")) "preview-video" else "preview-image"
-            val boundary = "Forknook" + System.nanoTime()
+            val boundary = "RecipeCove" + System.nanoTime()
             val c = connection(endpoint ?: "/imports/" + type, "POST", "multipart/form-data; boundary=" + boundary)
             c.doOutput = true
             c.setChunkedStreamingMode(16384)
@@ -238,7 +238,7 @@ private fun JSONObject.s(key: String) = optString(key).takeUnless { it == "null"
 private fun params(s: String) = URLEncoder.encode(s, "UTF-8")
 
 @Composable
-private fun RecipePhoto(api: ForknookApi, image: String, modifier: Modifier = Modifier) {
+private fun RecipePhoto(api: RecipeCoveApi, image: String, modifier: Modifier = Modifier) {
     val bitmap by produceState<Bitmap?>(null, api.origin, image, api.token) {
         value = api.photo(image)
     }
@@ -268,7 +268,7 @@ private fun Input(value: String, onChange: (String) -> Unit, title: String,
 }
 
 @Composable
-private fun ForknookApp(activity: ForknookActivity) {
+private fun RecipeCoveApp(activity: RecipeCoveActivity) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("forknook_native", Context.MODE_PRIVATE) }
     val legacyServer = remember { context.getSharedPreferences("forknook", Context.MODE_PRIVATE).getString("server", "").orEmpty() }
@@ -301,7 +301,7 @@ private fun ForknookApp(activity: ForknookActivity) {
     var catalogProviders by remember { mutableStateOf(JSONArray()) }
     var shareRetry by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
-    val api = remember(origin, token) { ForknookApi(origin, token) }
+    val api = remember(origin, token) { RecipeCoveApi(origin, token) }
     val canEdit = user?.s("role") in listOf("admin","approver","contributor")
     val isAdmin = user?.s("role") == "admin"
     val canApprove = user?.s("role") in listOf("admin","approver")
@@ -419,12 +419,12 @@ private fun ForknookApp(activity: ForknookActivity) {
         if (token.isBlank() || origin.isBlank()) {
             Column(Modifier.fillMaxSize().padding(26.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.Center) {
-                // Exact approved Forknook wordmark from the web application.
+                // Exact approved RecipeCove wordmark from the web application.
                 // Crop only its large blank top and bottom margins.
                 Surface(color = Color.White, shape = RoundedCornerShape(16.dp)) {
                     Image(
                         painter = painterResource(R.drawable.forknook_wordmark),
-                        contentDescription = "Forknook",
+                        contentDescription = "RecipeCove",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxWidth().height(124.dp)
                     )
@@ -435,11 +435,11 @@ private fun ForknookApp(activity: ForknookActivity) {
                     Spacer(Modifier.height(12.dp))
                     InfoCard("Shared recipe received") {
                         Text(sharedDescription(activity.incoming!!))
-                        Text("Sign in to extract it; Forknook will keep it until you review the recipe.")
+                        Text("Sign in to extract it; RecipeCove will keep it until you review the recipe.")
                     }
                 }
                 Spacer(Modifier.height(28.dp))
-                Input(serverInput, { serverInput = it }, "Forknook server URL")
+                Input(serverInput, { serverInput = it }, "RecipeCove server URL")
                 Spacer(Modifier.height(10.dp))
                 Input(username, {username = it}, "Username")
                 Spacer(Modifier.height(10.dp))
@@ -452,7 +452,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                         busy=true
                         try {
                             val server=checkedServer(serverInput)
-                            val auth=ForknookApi(server,"").call("/auth/login","POST",
+                            val auth=RecipeCoveApi(server,"").call("/auth/login","POST",
                                 JSONObject().put("username",username).put("password",password)).asObject()
                             val session=auth.s("token")
                             require(session.isNotBlank()){"Server did not return a session"}
@@ -472,11 +472,11 @@ private fun ForknookApp(activity: ForknookActivity) {
                             pendingHttpConsent=true
                         } else completeLogin()
                     } catch(e: Exception){message=e.message.orEmpty()}
-                },enabled=!busy,modifier=Modifier.fillMaxWidth().height(52.dp)){Text("Sign in to Forknook")}
+                },enabled=!busy,modifier=Modifier.fillMaxWidth().height(52.dp)){Text("Sign in to RecipeCove")}
                 if(pendingHttpConsent) AlertDialog(
                     onDismissRequest={pendingHttpConsent=false},
                     title={Text("Unencrypted connection warning")},
-                    text={Text("This Forknook server uses HTTP, not HTTPS. Your username, password, session token, recipes, and other data may be read or changed by anyone who can intercept your network traffic. Do not use this connection on public or untrusted networks. HTTPS is strongly recommended. By selecting Accept and connect, you agree to these risks for this server address.")},
+                    text={Text("This RecipeCove server uses HTTP, not HTTPS. Your username, password, session token, recipes, and other data may be read or changed by anyone who can intercept your network traffic. Do not use this connection on public or untrusted networks. HTTPS is strongly recommended. By selecting Accept and connect, you agree to these risks for this server address.")},
                     confirmButton={TextButton(onClick={
                         val approved=checkedServer(serverInput)
                         prefs.edit().putString("http_consent_origin",approved).apply()
@@ -488,7 +488,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (message.isNotBlank()) Text(message, color=MaterialTheme.colorScheme.error,
                     modifier=Modifier.padding(top=12.dp))
-                Text("This app connects to Forknook directly, not KitchenOwl.",
+                Text("This app connects to RecipeCove directly, not KitchenOwl.",
                     modifier=Modifier.padding(top=16.dp), style=MaterialTheme.typography.bodySmall)
             }
         } else {
@@ -510,7 +510,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                     ) {
                         Image(
                             painter = painterResource(R.drawable.forknook_wordmark),
-                            contentDescription = "Forknook — open recipes",
+                            contentDescription = "RecipeCove — open recipes",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.width(184.dp).height(62.dp)
                                 .clickable { page = "Recipes"; detail = null; editing = null }
@@ -564,7 +564,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                                     InfoCard(sharedDescription(shared)) {
                                         val link = firstSharedUrl(shared.text.orEmpty())
                                         if (link != null) Text(link, style = MaterialTheme.typography.bodySmall)
-                                        else Text("Forknook received a photo, video, or recipe text.")
+                                        else Text("RecipeCove received a photo, video, or recipe text.")
                                         Text("Recipes are extracted for review. Nothing is saved until you choose Save.")
                                     }
                                 }
@@ -1005,8 +1005,8 @@ private fun ForknookApp(activity: ForknookActivity) {
                                     }
                                 }
                                 InfoCard("Share recipes from other apps") {
-                                    Text("In Instagram or Facebook, tap Share, then choose Forknook from your phone's Share sheet. If it isn't in the first row, tap More.")
-                                    Text("Forknook can receive post/Reel links and accessible image or video files. You'll review the extracted recipe before saving.")
+                                    Text("In Instagram or Facebook, tap Share, then choose RecipeCove from your phone's Share sheet. If it isn't in the first row, tap More.")
+                                    Text("RecipeCove can receive post/Reel links and accessible image or video files. You'll review the extracted recipe before saving.")
                                     Text("Private posts, restricted videos or unsupported links may not be extractable; you can retry or paste a link in Import.")
                                 }
                                 OutlinedButton(onClick={
@@ -1015,7 +1015,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                                         signOut()
                                     }
                                 },modifier=Modifier.fillMaxWidth()){Text("Sign out")}
-                                Text("Forknook Android 2.2.3 · Kotlin native client",
+                                Text("RecipeCove Android 2.3.0 · Kotlin native client",
                                     style=MaterialTheme.typography.labelSmall)
                             }
                         }
