@@ -474,7 +474,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                 page = when(page) {"Recipe" -> "Recipes"; "Editor" -> "Recipes"; "List" -> "Shopping";else -> "Recipes"}
                 detail=null;editing=null
             }
-            val tabs = listOf("Recipes","Plan","Shopping","More")
+            val tabs = listOf("Recipes","Plan","Discover","Shopping","More")
             Scaffold(
               // Outer Surface already consumed the system bar insets.
               contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -513,7 +513,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                             },
                             icon = { Text(when(tab) {
                                 "Recipes" -> "📖"; "Plan" -> "🗓"
-                                "Shopping" -> "🛒"; else -> "☰"
+                                "Discover" -> "🔎"; "Shopping" -> "🛒"; else -> "☰"
                             }) },
                             label = { Text(tab) }
                         )
@@ -779,15 +779,15 @@ private fun ForknookApp(activity: ForknookActivity) {
                                                 "PATCH",JSONObject().put("name",item.s("name"))
                                                     .put("quantity",item.s("quantity")).put("checked",checked)){refresh()}
                                         })
-                                        Text((item.s("quantity")+" "+item.s("name")).trim(),modifier=Modifier.weight(1f))
+                                        Text(item.s("name") + item.s("quantity").takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty(), modifier=Modifier.weight(1f))
                                     }
                                 }
                             }
                         }
                         "Plan" -> {
-                            Text("Meal planning",style=MaterialTheme.typography.titleLarge)
+                            Text("Plan to Make",style=MaterialTheme.typography.titleLarge)
                             Button(onClick={chosenRecipe=recipes.optJSONObject(0)?.optInt("id")?:0;page="Add meal"},
-                                enabled=recipes.length()>0){Text("Plan a meal")}
+                                enabled=recipes.length()>0){Text("Plan a recipe")}
                             LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                 items(payload.asArray().objects()) { meal->
                                     InfoCard(meal.s("day")+" · "+meal.s("meal")) {
@@ -802,7 +802,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                         "Add meal" -> {
                             Column(Modifier.verticalScroll(rememberScrollState()),
                                 verticalArrangement=Arrangement.spacedBy(12.dp)){
-                                Text("Plan a meal",style=MaterialTheme.typography.titleLarge)
+                                Text("Plan to Make",style=MaterialTheme.typography.titleLarge)
                                 Input(dateInput,{dateInput=it},"Date (YYYY-MM-DD)")
                                 Text("Meal",fontWeight=FontWeight.Bold)
                                 Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
@@ -821,7 +821,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                                 Button(onClick={
                                     request("/meal-plan","POST",JSONObject().put("day",dateInput)
                                         .put("meal",mealInput).put("recipe_id",chosenRecipe)){page="Plan";refresh()}
-                                },enabled=chosenRecipe>0){Text("Add to meal plan")}
+                                },enabled=chosenRecipe>0){Text("Add to Plan to Make")}
                             }
                         }
                         "Review" -> {
@@ -935,7 +935,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                         "More" -> {
                             Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){
                                 val links=mutableListOf("Import" to "Import recipes, photos and videos",
-                                    "Discover" to "Search recipe catalogs","Categories" to "Browse categories",
+                                    "Categories" to "Browse categories",
                                     "Review" to "Family recipe requests","Family" to "Approval preferences")
                                 if(isAdmin){links.add("Users" to "Manage family accounts");links.add("Add user" to "Create a family account")}
                                 links.forEach{(name,desc)->
