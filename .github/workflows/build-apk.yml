@@ -1,4 +1,4 @@
-name: Build Forknook APK
+name: Build RecipeCove APK
 on:
   workflow_dispatch:
   push:
@@ -46,13 +46,13 @@ jobs:
           import pathlib, re, shutil
           config = pathlib.Path('android/app/build.gradle').read_text()
           version = re.search(r"versionName\s+'([^']+)'", config).group(1)
-          shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk', f'Forknook-v{version}-debug.apk')
+          shutil.copyfile('android/app/build/outputs/apk/debug/app-debug.apk', f'RecipeCove-v{version}-debug.apk')
           print('Created versioned APK:', version)
           PY
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Forknook-Android-debug
-          path: Forknook-v*-debug.apk
+          name: RecipeCove-Android-debug
+          path: RecipeCove-v*-debug.apk
           if-no-files-found: error
           retention-days: 30
