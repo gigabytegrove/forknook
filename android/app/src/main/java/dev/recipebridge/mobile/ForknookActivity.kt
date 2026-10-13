@@ -789,7 +789,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                                         signOut()
                                     }
                                 },modifier=Modifier.fillMaxWidth()){Text("Sign out")}
-                                Text("Forknook Android 2.2.0-alpha · Kotlin native client",
+                                Text("Forknook Android 2.2.1 · Kotlin native client",
                                     style=MaterialTheme.typography.labelSmall)
                             }
                         }
