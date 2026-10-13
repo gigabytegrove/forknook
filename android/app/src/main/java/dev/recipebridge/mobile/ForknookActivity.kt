@@ -273,10 +273,11 @@ private fun ForknookApp(activity: ForknookActivity) {
     val prefs = remember { context.getSharedPreferences("forknook_native", Context.MODE_PRIVATE) }
     val legacyServer = remember { context.getSharedPreferences("forknook", Context.MODE_PRIVATE).getString("server", "").orEmpty() }
     var origin by remember { mutableStateOf(prefs.getString("server", legacyServer).orEmpty()) }
-    var token by remember { mutableStateOf(prefs.getString("session", "").orEmpty()) }
+    var token by remember { mutableStateOf(SessionVault.load(context)) }
     var username by remember { mutableStateOf(prefs.getString("username", "").orEmpty()) }
     var password by remember { mutableStateOf("") }
     var serverInput by remember { mutableStateOf(origin) }
+    var pendingHttpConsent by remember { mutableStateOf(false) }
     var user by remember { mutableStateOf<JSONObject?>(null) }
     var page by remember { mutableStateOf("Recipes") }
     var detail by remember { mutableStateOf<JSONObject?>(null) }
@@ -322,7 +323,7 @@ private fun ForknookApp(activity: ForknookActivity) {
     fun openEditor(recipe: JSONObject = JSONObject()) { editing = recipe; detail = null; page = "Editor" }
     fun openList(id: Int) { chosenList = id; page = "List" }
     fun signOut() {
-        token = ""; user = null; prefs.edit().remove("session").apply();page = "Recipes"
+        token = ""; user = null; SessionVault.clear(context);page = "Recipes"
     }
 
     LaunchedEffect(origin, token) {
@@ -446,7 +447,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                     visualTransformation=androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     modifier=Modifier.fillMaxWidth())
                 Spacer(Modifier.height(20.dp))
-                Button(onClick={
+                fun completeLogin() {
                     scope.launch {
                         busy=true
                         try {
@@ -455,14 +456,35 @@ private fun ForknookApp(activity: ForknookActivity) {
                                 JSONObject().put("username",username).put("password",password)).asObject()
                             val session=auth.s("token")
                             require(session.isNotBlank()){"Server did not return a session"}
-                            prefs.edit().putString("server",server).putString("session",session)
-                                .putString("username",username).apply()
+                            SessionVault.save(context, session)
+                            prefs.edit().putString("server",server).putString("username",username).apply()
                             origin=server;token=session;user=auth.optJSONObject("user")
                             password="";message=""
                         } catch(e: Exception){message=e.message.orEmpty()}
                         finally {busy=false}
                     }
+                }
+                Button(onClick={
+                    try {
+                        val server=checkedServer(serverInput)
+                        val approved=prefs.getString("http_consent_origin", "").orEmpty()
+                        if(server.startsWith("http://") && approved!=server) {
+                            pendingHttpConsent=true
+                        } else completeLogin()
+                    } catch(e: Exception){message=e.message.orEmpty()}
                 },enabled=!busy,modifier=Modifier.fillMaxWidth().height(52.dp)){Text("Sign in to Forknook")}
+                if(pendingHttpConsent) AlertDialog(
+                    onDismissRequest={pendingHttpConsent=false},
+                    title={Text("Unencrypted connection warning")},
+                    text={Text("This Forknook server uses HTTP, not HTTPS. Your username, password, session token, recipes, and other data may be read or changed by anyone who can intercept your network traffic. Do not use this connection on public or untrusted networks. HTTPS is strongly recommended. By selecting Accept and connect, you agree to these risks for this server address.")},
+                    confirmButton={TextButton(onClick={
+                        val approved=checkedServer(serverInput)
+                        prefs.edit().putString("http_consent_origin",approved).apply()
+                        pendingHttpConsent=false
+                        completeLogin()
+                    }){Text("Accept and connect")}},
+                    dismissButton={TextButton(onClick={pendingHttpConsent=false}){Text("Cancel")}}
+                )
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (message.isNotBlank()) Text(message, color=MaterialTheme.colorScheme.error,
                     modifier=Modifier.padding(top=12.dp))
