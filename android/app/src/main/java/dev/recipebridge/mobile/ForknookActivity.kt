@@ -50,7 +50,20 @@ private val pine = Color(0xFF1E3F2D)
 private val paper = Color(0xFFFFFCF5)
 private val terracotta = Color(0xFFDC543B)
 
-data class SharedRecipe(val text: String? = null, val file: Uri? = null, val mime: String = "")
+/** A share from Instagram, another app, or a local media picker. */
+data class SharedRecipe(
+    val text: String? = null,
+    val file: Uri? = null,
+    val mime: String = "",
+    val sender: String = ""
+)
+
+private fun sharedDescription(share: SharedRecipe): String = when {
+    share.file != null && share.mime.startsWith("video/") -> "Shared video"
+    share.file != null && share.mime.startsWith("image/") -> "Shared image"
+    firstSharedUrl(share.text.orEmpty()) != null -> "Shared recipe or social-media link"
+    else -> "Shared recipe text"
+}
 
 class ForknookActivity : ComponentActivity() {
     var incoming by mutableStateOf<SharedRecipe?>(null)
@@ -77,12 +90,40 @@ class ForknookActivity : ComponentActivity() {
 
     @Suppress("DEPRECATION")
     private fun readShare(intent: Intent?): SharedRecipe? {
-        if (intent?.action != Intent.ACTION_SEND) return null
-        val mime = intent.type.orEmpty()
-        return if (mime.startsWith("image/") || mime.startsWith("video/")) {
-            val file = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            file?.let { SharedRecipe(file = it, mime = mime) }
-        } else intent.getStringExtra(Intent.EXTRA_TEXT)?.let { SharedRecipe(text = it) }
+        if (intent == null || intent.action !in listOf(
+                Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE, Intent.ACTION_VIEW
+            )) return null
+
+        // Instagram commonly shares the Reel URL in EXTRA_TEXT, even when
+        // the intent MIME type suggests media. Other apps use ClipData or
+        // EXTRA_STREAM instead. Preserve whichever usable payload exists.
+        val clip = intent.clipData
+        val sharedText = listOfNotNull(
+            intent.getStringExtra(Intent.EXTRA_TEXT),
+            intent.getStringExtra(Intent.EXTRA_HTML_TEXT),
+            if (intent.action == Intent.ACTION_VIEW) intent.dataString else null,
+            clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString(),
+            clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+                ?.takeIf { it.scheme in listOf("http", "https") }?.toString()
+        ).firstOrNull { it.isNotBlank() }?.trim()
+
+        val stream = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            ?: intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.firstOrNull()
+            ?: clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+                ?.takeIf { it.scheme == "content" || it.scheme == "file" }
+
+        val mime = if (stream != null) {
+            contentResolver.getType(stream).orEmpty()
+                .ifBlank { intent.type.orEmpty() }
+        } else intent.type.orEmpty()
+        val mediaFile = stream?.takeIf {
+            mime.startsWith("video/") || mime.startsWith("image/")
+        }
+        if (mediaFile == null && sharedText.isNullOrBlank()) return null
+        return SharedRecipe(
+            text = sharedText, file = mediaFile, mime = mime,
+            sender = intent.`package`.orEmpty()
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -169,6 +210,8 @@ private class ForknookApi(val origin: String, val token: String) {
             val c = connection(endpoint ?: "/imports/" + type, "POST", "multipart/form-data; boundary=" + boundary)
             c.doOutput = true
             c.setChunkedStreamingMode(16384)
+            // Video OCR and speech recognition can legitimately take minutes.
+            c.readTimeout = if (mime.startsWith("video/")) 960_000 else 90_000
             try {
                 c.outputStream.use { out ->
                     out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"shared\"\r\nContent-Type: " +
@@ -255,6 +298,7 @@ private fun ForknookApp(activity: ForknookActivity) {
     var chosenList by remember { mutableIntStateOf(0) }
     var roleInput by remember { mutableStateOf("contributor") }
     var catalogProviders by remember { mutableStateOf(JSONArray()) }
+    var shareRetry by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val api = remember(origin, token) { ForknookApi(origin, token) }
     val canEdit = user?.s("role") in listOf("admin","approver","contributor")
@@ -324,21 +368,38 @@ private fun ForknookApp(activity: ForknookActivity) {
     }
 
     val shared = activity.incoming
-    LaunchedEffect(shared, origin, token) {
+    LaunchedEffect(shared, origin, token, shareRetry) {
         if (shared != null && token.isNotBlank() && origin.isNotBlank()) {
+            page = "Share"
             busy = true
+            message = ""
             try {
                 val parsed = if (shared.file != null) {
                     api.upload(context, shared.file, shared.mime)
                 } else {
                     val input = shared.text.orEmpty()
-                    val url = Regex("https?://[^\\s]+").find(input)?.value
-                    if (url != null) api.call("/imports/preview-url", "POST", JSONObject().put("url",url)).asObject()
-                    else api.call("/imports/preview-text", "POST", JSONObject().put("text",input)).asObject()
+                    val link = firstSharedUrl(input)
+                    if (link != null) {
+                        api.call("/imports/preview-url", "POST",
+                            JSONObject().put("url", link)).asObject()
+                    } else {
+                        api.call("/imports/preview-text", "POST",
+                            JSONObject().put("text", input)).asObject()
+                    }
                 }
+                // Import is PREVIEW-ONLY. Saving in Editor still uses the
+                // family's ordinary role and approval workflow.
+                activity.clearShare()
                 openEditor(parsed)
-            } catch(e: Exception) { message = "Shared recipe: " + e.message.orEmpty() }
-            finally { busy = false; activity.clearShare() }
+            } catch (e: Exception) {
+                // Keep the received content so the user can retry instead of
+                // being forced to re-share from Instagram.
+                message = "Could not extract the shared recipe: " +
+                    e.message.orEmpty() +
+                    ". Retry or dismiss the share."
+            } finally {
+                busy = false
+            }
         }
     }
 
@@ -369,6 +430,13 @@ private fun ForknookApp(activity: ForknookActivity) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Text("Your family's own kitchen", color = pine)
+                if (activity.incoming != null) {
+                    Spacer(Modifier.height(12.dp))
+                    InfoCard("Shared recipe received") {
+                        Text(sharedDescription(activity.incoming!!))
+                        Text("Sign in to extract it; Forknook will keep it until you review the recipe.")
+                    }
+                }
                 Spacer(Modifier.height(28.dp))
                 Input(serverInput, { serverInput = it }, "Forknook server URL")
                 Spacer(Modifier.height(10.dp))
@@ -461,6 +529,42 @@ private fun ForknookApp(activity: ForknookActivity) {
                     }
                     if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     when(page) {
+                        "Share" -> {
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Text("Import shared recipe",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold)
+                                if (shared != null) {
+                                    InfoCard(sharedDescription(shared)) {
+                                        val link = firstSharedUrl(shared.text.orEmpty())
+                                        if (link != null) Text(link, style = MaterialTheme.typography.bodySmall)
+                                        else Text("Forknook received a photo, video, or recipe text.")
+                                        Text("Recipes are extracted for review. Nothing is saved until you choose Save.")
+                                    }
+                                }
+                                if (busy) {
+                                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                                    Text("Extracting ingredients and directions. Videos may take several minutes.")
+                                } else if (shared != null) {
+                                    Button(
+                                        onClick = { shareRetry++ },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Retry recipe extraction") }
+                                    OutlinedButton(
+                                        onClick = {
+                                            activity.clearShare()
+                                            message = ""
+                                            page = "Recipes"
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text("Dismiss share") }
+                                }
+                            }
+                        }
                         "Recipes" -> {
                             OutlinedTextField(search,{search=it},label={Text("Search family recipes")},
                                 modifier=Modifier.fillMaxWidth(),singleLine=true)
@@ -842,13 +946,18 @@ private fun ForknookApp(activity: ForknookActivity) {
                                         }
                                     }
                                 }
+                                InfoCard("Share recipes from other apps") {
+                                    Text("In Instagram or Facebook, tap Share, then choose Forknook from your phone's Share sheet. If it isn't in the first row, tap More.")
+                                    Text("Forknook can receive post/Reel links and accessible image or video files. You'll review the extracted recipe before saving.")
+                                    Text("Private posts, restricted videos or unsupported links may not be extractable; you can retry or paste a link in Import.")
+                                }
                                 OutlinedButton(onClick={
                                     scope.launch {
                                         runCatching { api.call("/auth/logout","POST") }
                                         signOut()
                                     }
                                 },modifier=Modifier.fillMaxWidth()){Text("Sign out")}
-                                Text("Forknook Android 2.2.2 · Kotlin native client",
+                                Text("Forknook Android 2.2.3 · Kotlin native client",
                                     style=MaterialTheme.typography.labelSmall)
                             }
                         }

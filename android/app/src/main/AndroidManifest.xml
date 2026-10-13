@@ -7,9 +7,30 @@
    <activity android:name=".ForknookActivity" android:exported="true"
      android:launchMode="singleTop" android:windowSoftInputMode="adjustResize">
      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-     <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>
-     <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="image/*"/></intent-filter>
-     <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="video/*"/></intent-filter>
+     <!-- Appear in Android's Share sheet for links, captions, images and Reels. -->
+     <intent-filter>
+       <action android:name="android.intent.action.SEND"/>
+       <category android:name="android.intent.category.DEFAULT"/>
+       <data android:mimeType="text/*"/>
+       <data android:mimeType="image/*"/>
+       <data android:mimeType="video/*"/>
+     </intent-filter>
+     <intent-filter>
+       <action android:name="android.intent.action.SEND_MULTIPLE"/>
+       <category android:name="android.intent.category.DEFAULT"/>
+       <data android:mimeType="image/*"/>
+       <data android:mimeType="video/*"/>
+     </intent-filter>
+     <!-- Optional "Open with Forknook" for public Instagram posts/Reels. -->
+     <intent-filter>
+       <action android:name="android.intent.action.VIEW"/>
+       <category android:name="android.intent.category.DEFAULT"/>
+       <category android:name="android.intent.category.BROWSABLE"/>
+       <data android:scheme="https" android:host="www.instagram.com" android:pathPrefix="/reel/"/>
+       <data android:scheme="https" android:host="instagram.com" android:pathPrefix="/reel/"/>
+       <data android:scheme="https" android:host="www.instagram.com" android:pathPrefix="/p/"/>
+       <data android:scheme="https" android:host="instagram.com" android:pathPrefix="/p/"/>
+     </intent-filter>
    </activity>
  </application>
 </manifest>
