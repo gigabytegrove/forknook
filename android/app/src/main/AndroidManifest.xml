@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <uses-permission android:name="android.permission.INTERNET" />
- <application android:label="RecipeCove" android:icon="@drawable/recipecove_brand"
+ <application android:label="RecipeCove" android:icon="@drawable/recipecove_mark"
    android:theme="@style/RecipeBridgeTheme" android:usesCleartextTraffic="true"
    android:allowBackup="false" android:supportsRtl="true">
    <activity android:name=".RecipeCoveActivity" android:exported="true"
