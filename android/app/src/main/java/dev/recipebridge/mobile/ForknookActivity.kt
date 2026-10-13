@@ -419,18 +419,17 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
         if (token.isBlank() || origin.isBlank()) {
             Column(Modifier.fillMaxSize().padding(26.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.Center) {
-                // Exact approved RecipeCove wordmark from the web application.
-                // Crop only its large blank top and bottom margins.
+                // Official RecipeCove cookbook emblem.
                 Surface(color = Color.White, shape = RoundedCornerShape(16.dp)) {
                     Image(
-                        painter = painterResource(R.drawable.forknook_wordmark),
+                        painter = painterResource(R.drawable.recipecove_icon),
                         contentDescription = "RecipeCove",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxWidth().height(124.dp)
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("Your family's own kitchen", color = pine)
+                Text("Your recipes. One place.", color = pine)
                 if (activity.incoming != null) {
                     Spacer(Modifier.height(12.dp))
                     InfoCard("Shared recipe received") {
@@ -509,7 +508,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Image(
-                            painter = painterResource(R.drawable.forknook_wordmark),
+                            painter = painterResource(R.drawable.recipecove_icon),
                             contentDescription = "RecipeCove — open recipes",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.width(184.dp).height(62.dp)
