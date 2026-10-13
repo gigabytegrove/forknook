@@ -428,7 +428,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                     Image(
                         painter = painterResource(R.drawable.recipecove_wordmark),
                         contentDescription = "RecipeCove",
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxWidth().height(124.dp)
                     )
                 }
@@ -521,7 +521,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                         Image(
                             painter = painterResource(R.drawable.recipecove_wordmark),
                             contentDescription = "RecipeCove — open recipes",
-                            contentScale = ContentScale.Crop,
+                            contentScale = ContentScale.Fit,
                             modifier = Modifier.width(184.dp).height(62.dp)
                                 .clickable { page = "Recipes"; detail = null; editing = null }
                         )
