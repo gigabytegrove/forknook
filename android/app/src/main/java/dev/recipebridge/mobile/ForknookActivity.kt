@@ -34,6 +34,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -276,6 +279,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
     var token by remember { mutableStateOf(if (origin.startsWith("http://") && prefs.getString("http_consent_origin", "") != origin) "" else SessionVault.load(context)) }
     var username by remember { mutableStateOf(prefs.getString("username", "").orEmpty()) }
     var password by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
     var serverInput by remember { mutableStateOf(origin) }
     var pendingHttpConsent by remember { mutableStateOf(false) }
     var user by remember { mutableStateOf<JSONObject?>(null) }
@@ -442,9 +446,16 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                 Spacer(Modifier.height(10.dp))
                 Input(username, {username = it}, "Username")
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(password,{password=it},label={Text("Password")},
-                    visualTransformation=androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    modifier=Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value=password,
+                    onValueChange={password=it},
+                    label={Text("Password")},
+                    singleLine=true,
+                    keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,autoCorrectEnabled=false),
+                    visualTransformation=if(showPassword) VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon={TextButton(onClick={showPassword=!showPassword}){Text(if(showPassword) "Hide" else "Show")}},
+                    modifier=Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.height(20.dp))
                 fun completeLogin() {
                     scope.launch {
