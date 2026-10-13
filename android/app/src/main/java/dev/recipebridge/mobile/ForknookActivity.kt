@@ -273,7 +273,7 @@ private fun ForknookApp(activity: ForknookActivity) {
     val prefs = remember { context.getSharedPreferences("forknook_native", Context.MODE_PRIVATE) }
     val legacyServer = remember { context.getSharedPreferences("forknook", Context.MODE_PRIVATE).getString("server", "").orEmpty() }
     var origin by remember { mutableStateOf(prefs.getString("server", legacyServer).orEmpty()) }
-    var token by remember { mutableStateOf(SessionVault.load(context)) }
+    var token by remember { mutableStateOf(if (origin.startsWith("http://") && prefs.getString("http_consent_origin", "") != origin) "" else SessionVault.load(context)) }
     var username by remember { mutableStateOf(prefs.getString("username", "").orEmpty()) }
     var password by remember { mutableStateOf("") }
     var serverInput by remember { mutableStateOf(origin) }
