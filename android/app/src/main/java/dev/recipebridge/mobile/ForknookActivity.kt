@@ -293,7 +293,7 @@ private fun ForknookApp(activity: ForknookActivity) {
     var titleInput by remember { mutableStateOf("") }
     var textInput by remember { mutableStateOf("") }
     var dateInput by remember { mutableStateOf(java.time.LocalDate.now().toString()) }
-    var mealInput by remember { mutableStateOf("dinner") }
+    var mealInput by remember { mutableStateOf("anytime") }
     var chosenRecipe by remember { mutableIntStateOf(0) }
     var chosenList by remember { mutableIntStateOf(0) }
     var roleInput by remember { mutableStateOf("contributor") }
@@ -813,9 +813,9 @@ private fun ForknookApp(activity: ForknookActivity) {
                                 verticalArrangement=Arrangement.spacedBy(12.dp)){
                                 Text("Plan to Make",style=MaterialTheme.typography.titleLarge)
                                 Input(dateInput,{dateInput=it},"Date (YYYY-MM-DD)")
-                                Text("Meal",fontWeight=FontWeight.Bold)
+                                Text("Meal (optional)",fontWeight=FontWeight.Bold)
                                 Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                                    listOf("breakfast","lunch","dinner").forEach{m->
+                                    listOf("anytime","breakfast","lunch","dinner","snack").forEach{m->
                                         FilterChip(selected=mealInput==m,onClick={mealInput=m},label={Text(m)})
                                     }
                                 }
