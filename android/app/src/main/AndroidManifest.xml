@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <uses-permission android:name="android.permission.INTERNET" />
- <application android:label="Forknook" android:icon="@drawable/forknook_icon"
+ <application android:label="RecipeCove" android:icon="@drawable/forknook_icon"
    android:theme="@style/RecipeBridgeTheme" android:usesCleartextTraffic="true"
    android:allowBackup="false" android:supportsRtl="true">
-   <activity android:name=".ForknookActivity" android:exported="true"
+   <activity android:name=".RecipeCoveActivity" android:exported="true"
      android:launchMode="singleTop" android:windowSoftInputMode="adjustResize">
      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
      <!-- Appear in Android's Share sheet for links, captions, images and Reels. -->
@@ -21,7 +21,7 @@
        <data android:mimeType="image/*"/>
        <data android:mimeType="video/*"/>
      </intent-filter>
-     <!-- Optional "Open with Forknook" for public Instagram posts/Reels. -->
+     <!-- Optional "Open with RecipeCove" for public Instagram posts/Reels. -->
      <intent-filter>
        <action android:name="android.intent.action.VIEW"/>
        <category android:name="android.intent.category.DEFAULT"/>
