@@ -763,6 +763,7 @@ private fun ForknookApp(activity: ForknookActivity) {
                             val list=payload.asObject()
                             Text(list.s("name"),style=MaterialTheme.typography.titleLarge)
                             var newItem by remember(chosenList){mutableStateOf("")}
+                            var showHaveIt by remember(chosenList){mutableStateOf(false)}
                             Row(verticalAlignment=Alignment.CenterVertically) {
                                 OutlinedTextField(newItem,{newItem=it},label={Text("Add item")},modifier=Modifier.weight(1f))
                                 Button(onClick={
@@ -771,8 +772,16 @@ private fun ForknookApp(activity: ForknookActivity) {
                                     }
                                 },enabled=newItem.isNotBlank()){Text("Add")}
                             }
+                            val allItems=(list.optJSONArray("items")?:JSONArray()).objects()
+                            val haveCount=allItems.count{it.optBoolean("checked")}
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Text("Need to buy: ${allItems.size-haveCount}",modifier=Modifier.weight(1f))
+                                TextButton(onClick={showHaveIt=!showHaveIt}){
+                                    Text(if(showHaveIt)"Hide Have It ($haveCount)" else "Have It ($haveCount)")
+                                }
+                            }
                             LazyColumn(verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                                items((list.optJSONArray("items")?:JSONArray()).objects()) { item->
+                                items(allItems.filter{showHaveIt||!it.optBoolean("checked")}) { item->
                                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
                                         Checkbox(item.optBoolean("checked"),onCheckedChange={checked->
                                             request("/shopping-lists/"+chosenList+"/items/"+item.optInt("id"),
