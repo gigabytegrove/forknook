@@ -669,7 +669,9 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                         singleLine=true,modifier=Modifier.fillMaxWidth())
                                     if(selectedFolderId>0) {
                                         OutlinedButton(onClick={
-                                            request("/folders/"+selectedFolderId,"DELETE"){ refresh() }
+                                            val removing=selectedFolderId
+                                            request("/folders/"+removing,"DELETE"){refresh()}
+                                            if(folderFilter==removing.toString())folderFilter="all"
                                             selectedFolderId=0;folderNameInput=""
                                         },enabled=!busy){Text("Delete selected folder (keep recipes)")}
                                         TextButton(onClick={selectedFolderId=0;folderNameInput=""}){
@@ -761,7 +763,8 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                         onClick={categoryFilter=id},label={Text(cat.s("name"))})
                                 }
                             }
-                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            Row(Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 if(canEdit) Button(onClick={openEditor()}){Text("New recipe")}
                                 if(canEdit) OutlinedButton(onClick={page="Import"}){Text("Import")}
                                 if(canApprove) OutlinedButton(onClick={
