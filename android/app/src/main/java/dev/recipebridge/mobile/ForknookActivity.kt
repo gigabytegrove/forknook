@@ -339,6 +339,8 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
     var folderFilter by remember { mutableStateOf("all") }
     var categoryFilter by remember { mutableStateOf("all") }
     var manageFolders by remember { mutableStateOf(false) }
+    var manageCategories by remember { mutableStateOf(false) }
+    var categoryNameInput by remember { mutableStateOf("") }
     var folderNameInput by remember { mutableStateOf("") }
     var selectedFolderId by remember { mutableIntStateOf(0) }
     var nonce by remember { mutableIntStateOf(0) }
@@ -611,6 +613,37 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                         Text(message,modifier=Modifier.padding(12.dp),color=Color(0xFF883C28))
                     }
                     if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if(manageCategories) {
+                        AlertDialog(
+                            onDismissRequest={manageCategories=false},
+                            title={Text("Recipe categories")},
+                            text={
+                                Column(Modifier.verticalScroll(rememberScrollState()),
+                                    verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                                    Text("Categories describe the kind of recipe, such as Dinner or Dessert.",
+                                        style=MaterialTheme.typography.bodySmall)
+                                    categories.objects().forEach { cat ->
+                                        Text(cat.s("name"),style=MaterialTheme.typography.bodyMedium)
+                                    }
+                                    OutlinedTextField(value=categoryNameInput,
+                                        onValueChange={categoryNameInput=it},
+                                        label={Text("New category name")},
+                                        singleLine=true,modifier=Modifier.fillMaxWidth())
+                                }
+                            },
+                            confirmButton={TextButton(onClick={
+                                if(categoryNameInput.isNotBlank()){
+                                    request("/categories","POST",JSONObject()
+                                        .put("name",categoryNameInput.trim())
+                                        .put("color","#537d56")) {refresh()}
+                                    categoryNameInput="";manageCategories=false
+                                }
+                            },enabled=categoryNameInput.isNotBlank()&&!busy){
+                                Text("Create category")
+                            }},
+                            dismissButton={TextButton(onClick={manageCategories=false}){Text("Close")}}
+                        )
+                    }
                     if(manageFolders) {
                         AlertDialog(
                             onDismissRequest={manageFolders=false;selectedFolderId=0},
@@ -734,6 +767,9 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                 if(canApprove) OutlinedButton(onClick={
                                     folderNameInput="";selectedFolderId=0;manageFolders=true
                                 }){Text("Folders")}
+                                if(canApprove) OutlinedButton(onClick={
+                                    categoryNameInput="";manageCategories=true
+                                }){Text("Categories")}
                                 if(selection.isNotEmpty()) OutlinedButton(onClick={
                                     request("/shopping-lists/build","POST",
                                         JSONObject().put("recipe_ids",JSONArray(selection.toList()))
