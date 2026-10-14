@@ -244,7 +244,9 @@ private fun params(s: String) = URLEncoder.encode(s, "UTF-8")
 
 @Composable
 private fun RecipePhoto(api: RecipeCoveApi, image: String, modifier: Modifier = Modifier) {
-    val remote = image.startsWith("https://", ignoreCase = true)
+    val remote = (image.startsWith("https://", ignoreCase = true) ||
+                  image.startsWith("http://", ignoreCase = true)) &&
+                 !image.startsWith(api.origin + "/")
     if (remote) {
         // Publisher images often redirect to a separate CDN. Coil handles those
         // redirects and caches images; no RecipeCove token is sent to publishers.
@@ -951,7 +953,8 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                 Text("Search a recipe name or ingredient to explore recipes from available sources.",
                                     color=pine,style=MaterialTheme.typography.bodyMedium)
                             }
-                            LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp),
+                            LazyColumn(modifier=Modifier.weight(1f),
+                                verticalArrangement=Arrangement.spacedBy(10.dp),
                                 contentPadding=PaddingValues(bottom=16.dp)) {
                                 items(discoverResults.objects()){ item ->
                                     ElevatedCard(
