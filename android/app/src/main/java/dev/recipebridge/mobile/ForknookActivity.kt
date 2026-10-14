@@ -19,6 +19,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -317,6 +318,9 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
     var page by remember { mutableStateOf("Recipes") }
     var discoveredRecipe by remember { mutableStateOf<JSONObject?>(null) }
     var discoverResults by remember { mutableStateOf(JSONArray()) }
+    // The state lives above the conditional page branch, so navigating into a
+    // recipe and back restores the exact list item and pixel scroll offset.
+    val discoverListState = rememberLazyListState()
     var discoverProvider by remember { mutableStateOf("all") }
     var discoverMode by remember { mutableStateOf("name") }
     var discoverQuery by remember { mutableStateOf("") }
@@ -460,7 +464,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
             Column(Modifier.fillMaxSize().padding(26.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.Center) {
                 // Official RecipeCove cookbook emblem.
-                Surface(color = Color.White, shape = RoundedCornerShape(16.dp)) {
+                Surface(color = Color.Transparent, shape = RoundedCornerShape(16.dp)) {
                     Image(
                         painter = painterResource(R.drawable.recipecove_wordmark_alpha),
                         contentDescription = "RecipeCove",
@@ -558,7 +562,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                             painter = painterResource(R.drawable.recipecove_wordmark_alpha),
                             contentDescription = "RecipeCove — open recipes",
                             contentScale = ContentScale.Fit,
-                            modifier = Modifier.width(184.dp).height(62.dp)
+                            modifier = Modifier.widthIn(max=226.dp).fillMaxWidth(0.68f).height(64.dp)
                                 .clickable { page = "Recipes"; detail = null; editing = null }
                         )
 
@@ -944,6 +948,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                     request("/discovery/search?provider="+params(discoverProvider)+
                                         "&mode="+params(discoverMode)+"&q="+params(discoverQuery)) { response ->
                                         discoverResults=response.asObject().optJSONArray("items")?:JSONArray()
+                                        scope.launch { discoverListState.scrollToItem(0) }
                                     }
                                 },
                                 enabled=discoverQuery.trim().length>=2 && !busy,
@@ -954,9 +959,11 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                     color=pine,style=MaterialTheme.typography.bodyMedium)
                             }
                             LazyColumn(modifier=Modifier.weight(1f),
+                                state=discoverListState,
                                 verticalArrangement=Arrangement.spacedBy(10.dp),
                                 contentPadding=PaddingValues(bottom=16.dp)) {
-                                items(discoverResults.objects()){ item ->
+                                items(discoverResults.objects(),
+                                    key={ item -> item.s("provider")+":"+item.s("id") }){ item ->
                                     ElevatedCard(
                                         onClick={
                                             val resultProvider=item.s("provider").ifBlank { discoverProvider }
