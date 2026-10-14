@@ -426,7 +426,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                 // Official RecipeCove cookbook emblem.
                 Surface(color = Color.White, shape = RoundedCornerShape(16.dp)) {
                     Image(
-                        painter = painterResource(R.drawable.recipecove_wordmark),
+                        painter = painterResource(R.drawable.recipecove_wordmark_alpha),
                         contentDescription = "RecipeCove",
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxWidth().height(124.dp)
@@ -511,7 +511,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
               // Outer Surface already consumed the system bar insets.
               contentWindowInsets = WindowInsets(0, 0, 0, 0),
               topBar = {
-                Surface(color = Color.White, tonalElevation = 1.dp) {
+                Surface(color = paper, tonalElevation = 1.dp) {
                     Row(
                         modifier = Modifier.fillMaxWidth().height(70.dp)
                             .padding(horizontal = 14.dp),
@@ -519,15 +519,13 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Image(
-                            painter = painterResource(R.drawable.recipecove_wordmark),
+                            painter = painterResource(R.drawable.recipecove_wordmark_alpha),
                             contentDescription = "RecipeCove — open recipes",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.width(184.dp).height(62.dp)
                                 .clickable { page = "Recipes"; detail = null; editing = null }
                         )
-                        TextButton(onClick = { refresh() }) {
-                            Text("Refresh", color = pine)
-                        }
+
                     }
                 }
               },
@@ -941,7 +939,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                             LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){
                                 items(payload.asArray().objects()){item->
                                     ElevatedCard(onClick={
-                                        request("/discovery/preview?provider="+params(provider)+"&id="+params(item.s("id"))){
+                                        request("/discovery/preview?provider="+params(item.s("provider").ifBlank{provider})+"&id="+params(item.s("id"))){
                                             previewRecipe=it.asObject()
                                         }
                                     }) { Column(Modifier.fillMaxWidth().padding(16.dp)){
@@ -1025,7 +1023,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                         signOut()
                                     }
                                 },modifier=Modifier.fillMaxWidth()){Text("Sign out")}
-                                Text("RecipeCove Android 2.3.0 · Kotlin native client",
+                                Text("RecipeCove v" + context.packageManager.getPackageInfo(context.packageName, 0).versionName,
                                     style=MaterialTheme.typography.labelSmall)
                             }
                         }
