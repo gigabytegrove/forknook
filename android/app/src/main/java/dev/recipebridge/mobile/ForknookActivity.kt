@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -242,14 +244,41 @@ private fun params(s: String) = URLEncoder.encode(s, "UTF-8")
 
 @Composable
 private fun RecipePhoto(api: RecipeCoveApi, image: String, modifier: Modifier = Modifier) {
-    val bitmap by produceState<Bitmap?>(null, api.origin, image, api.token) {
-        value = api.photo(image)
-    }
-    if (bitmap != null) {
-        Image(bitmap!!.asImageBitmap(), contentDescription = "Recipe photograph",
-            modifier = modifier, contentScale = ContentScale.Crop)
-    } else Box(modifier, contentAlignment = Alignment.Center) {
-        Text("🍲", style = MaterialTheme.typography.headlineLarge)
+    val remote = image.startsWith("https://", ignoreCase = true)
+    if (remote) {
+        // Publisher images often redirect to a separate CDN. Coil handles those
+        // redirects and caches images; no RecipeCove token is sent to publishers.
+        SubcomposeAsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(image).crossfade(true).build(),
+            contentDescription = "Recipe photograph",
+            modifier = modifier,
+            contentScale = ContentScale.Crop,
+            loading = {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            },
+            error = {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Photograph unavailable", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        )
+    } else {
+        // Local photos are private and require the signed-in user's bearer token.
+        val bitmap by produceState<Bitmap?>(null, api.origin, image, api.token) {
+            value = api.photo(image)
+        }
+        if (bitmap != null) {
+            Image(bitmap!!.asImageBitmap(), contentDescription = "Recipe photograph",
+                modifier = modifier, contentScale = ContentScale.Crop)
+        } else {
+            Box(modifier, contentAlignment = Alignment.Center) {
+                Text(if (image.isBlank()) "No photograph available" else "Photograph unavailable",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
@@ -284,6 +313,11 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
     var pendingHttpConsent by remember { mutableStateOf(false) }
     var user by remember { mutableStateOf<JSONObject?>(null) }
     var page by remember { mutableStateOf("Recipes") }
+    var discoveredRecipe by remember { mutableStateOf<JSONObject?>(null) }
+    var discoverResults by remember { mutableStateOf(JSONArray()) }
+    var discoverProvider by remember { mutableStateOf("all") }
+    var discoverMode by remember { mutableStateOf("name") }
+    var discoverQuery by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf<JSONObject?>(null) }
     var editing by remember { mutableStateOf<JSONObject?>(null) }
     var listDetail by remember { mutableStateOf<JSONObject?>(null) }
@@ -365,7 +399,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
             }
             if (path.isNotEmpty()) try {
                 val result = api.call(path)
-                if (page=="Discover") { catalogProviders=result.asArray();payload=JSONArray() }
+                if (page=="Discover") { catalogProviders=result.asArray() }
                 else payload=result
             }
             catch (e: Exception) { message = e.message.orEmpty() }
@@ -503,7 +537,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
             }
         } else {
             BackHandler(page != "Recipes") {
-                page = when(page) {"Recipe" -> "Recipes"; "Editor" -> "Recipes"; "List" -> "Shopping";else -> "Recipes"}
+                page = when(page) {"Discover recipe" -> "Discover"; "Recipe" -> "Recipes"; "Editor" -> "Recipes"; "List" -> "Shopping";else -> "Recipes"}
                 detail=null;editing=null
             }
             val tabs = listOf("Recipes","Plan","Discover","Shopping","More")
@@ -536,9 +570,9 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                 ) {
                     tabs.forEach { tab ->
                         NavigationBarItem(
-                            selected = page == tab,
+                            selected = page == tab || (tab == "Discover" && page == "Discover recipe"),
                             onClick = {
-                                page = tab; detail = null; editing = null
+                                page = tab; detail = null; editing = null; discoveredRecipe = null
                                 listDetail = null; message = ""
                             },
                             icon = { Text(when(tab) {
@@ -885,68 +919,127 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                             }
                         }
                         "Discover" -> {
-                            var provider by remember{mutableStateOf("all")}
-                            var mode by remember{mutableStateOf("name")}
-                            var previewRecipe by remember { mutableStateOf<JSONObject?>(null) }
-                            previewRecipe?.let { draft ->
-                                AlertDialog(
-                                    onDismissRequest={previewRecipe=null},
-                                    title={Text(draft.s("title").ifBlank{"Recipe preview"})},
-                                    text={
-                                        Column(Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState()),
-                                            verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                                            if(draft.s("description").isNotBlank()) Text(draft.s("description"))
-                                            Text("Ingredients",fontWeight=FontWeight.Bold)
-                                            (draft.optJSONArray("ingredients")?:JSONArray()).objects().forEach{ingredient->
-                                                Text("• "+ingredient.s("raw").ifBlank{ingredient.s("name")})
+                            Text("Discover recipes", style = MaterialTheme.typography.titleLarge)
+                            Input(discoverQuery, { discoverQuery = it }, "Recipe name or ingredient")
+                            Row(Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                catalogProviders.objects().forEach { source ->
+                                    val id = source.s("id")
+                                    FilterChip(selected=discoverProvider==id,
+                                        onClick={ discoverProvider=id },
+                                        label={ Text(source.s("name")) })
+                                }
+                            }
+                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                listOf("name","ingredient").forEach { kind ->
+                                    FilterChip(selected=discoverMode==kind,
+                                        onClick={ discoverMode=kind },
+                                        label={Text(if(kind=="name") "By name" else "By ingredient")})
+                                }
+                            }
+                            Button(
+                                onClick={
+                                    request("/discovery/search?provider="+params(discoverProvider)+
+                                        "&mode="+params(discoverMode)+"&q="+params(discoverQuery)) { response ->
+                                        discoverResults=response.asObject().optJSONArray("items")?:JSONArray()
+                                    }
+                                },
+                                enabled=discoverQuery.trim().length>=2 && !busy,
+                                modifier=Modifier.fillMaxWidth()
+                            ){ Text("Search recipes") }
+                            if(discoverResults.length()==0 && !busy) {
+                                Text("Search a recipe name or ingredient to explore recipes from available sources.",
+                                    color=pine,style=MaterialTheme.typography.bodyMedium)
+                            }
+                            LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp),
+                                contentPadding=PaddingValues(bottom=16.dp)) {
+                                items(discoverResults.objects()){ item ->
+                                    ElevatedCard(
+                                        onClick={
+                                            val resultProvider=item.s("provider").ifBlank { discoverProvider }
+                                            request("/discovery/preview?provider="+params(resultProvider)+
+                                                "&id="+params(item.s("id"))) { response ->
+                                                discoveredRecipe=response.asObject()
+                                                page="Discover recipe"
                                             }
-                                            Text("Directions",fontWeight=FontWeight.Bold)
-                                            val steps=draft.optJSONArray("instructions")?:JSONArray()
-                                            for(i in 0 until steps.length()) {
-                                                val step=steps.optString(i).trim()
-                                                if(step.isNotEmpty()) Text("${i+1}. $step")
+                                        },
+                                        modifier=Modifier.fillMaxWidth(),
+                                        shape=RoundedCornerShape(16.dp)
+                                    ) {
+                                        Row(Modifier.fillMaxWidth().padding(12.dp),
+                                            horizontalArrangement=Arrangement.spacedBy(12.dp),
+                                            verticalAlignment=Alignment.CenterVertically) {
+                                            RecipePhoto(api,item.s("image_url"),
+                                                Modifier.size(92.dp))
+                                            Column(Modifier.weight(1f),
+                                                verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                                                Text(item.s("title").ifBlank{item.s("name")},
+                                                    fontWeight=FontWeight.Bold,maxLines=3,
+                                                    overflow=TextOverflow.Ellipsis)
+                                                Text(catalogProviders.objects()
+                                                    .firstOrNull{it.s("id")==item.s("provider")}
+                                                    ?.s("name")?:item.s("provider"),
+                                                    color=pine,style=MaterialTheme.typography.labelSmall)
+                                                Text("View full recipe",color=pine,
+                                                    style=MaterialTheme.typography.bodySmall)
                                             }
                                         }
-                                    },
-                                    confirmButton={
-                                        TextButton(onClick={previewRecipe=null;openEditor(draft)}){Text("Import recipe")}
-                                    },
-                                    dismissButton={TextButton(onClick={previewRecipe=null}){Text("Close")}}
-                                )
-                            }
-                            Text("Discover recipes",style=MaterialTheme.typography.titleLarge)
-                            Input(search,{search=it},"Recipe name or ingredient")
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                                Row(Modifier.horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                                    catalogProviders.objects().forEach { source ->
-                                        val id=source.s("id")
-                                        FilterChip(selected=provider==id,
-                                            onClick={provider=id},
-                                            label={Text(source.s("name"))})
                                     }
                                 }
                             }
-                            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                                listOf("name","ingredient").forEach{m->FilterChip(selected=mode==m,
-                                    onClick={mode=m},label={Text(m)})}
-                            }
-                            Button(onClick={
-                                request("/discovery/search?provider="+params(provider)+"&mode="+params(mode)+"&q="+params(search)){
-                                    payload=it.asObject().optJSONArray("items")?:JSONArray()
-                                }
-                            },enabled=search.isNotBlank()){Text("Search catalogs")}
-                            LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){
-                                items(payload.asArray().objects()){item->
-                                    ElevatedCard(onClick={
-                                        request("/discovery/preview?provider="+params(item.s("provider").ifBlank{provider})+"&id="+params(item.s("id"))){
-                                            previewRecipe=it.asObject()
+                        }
+                        "Discover recipe" -> {
+                            val draft=discoveredRecipe
+                            if(draft==null) {
+                                Text("Recipe preview is no longer available.")
+                                OutlinedButton(onClick={page="Discover"}) {Text("Back to search")}
+                            } else {
+                                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                                    verticalArrangement=Arrangement.spacedBy(16.dp)) {
+                                    OutlinedButton(onClick={page="Discover"}) {Text("← Back to results")}
+                                    RecipePhoto(api,draft.s("image_url"),
+                                        Modifier.fillMaxWidth().height(240.dp))
+                                    Text(draft.s("title").ifBlank{"Recipe"},
+                                        style=MaterialTheme.typography.headlineMedium,
+                                        fontWeight=FontWeight.Bold)
+                                    if(draft.s("description").isNotBlank())
+                                        Text(draft.s("description"))
+                                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                                        if(draft.s("servings").isNotBlank())
+                                            Text("Servings: "+draft.s("servings"))
+                                        if(draft.optInt("prep_time",0)>0)
+                                            Text("Prep: "+draft.optInt("prep_time")+" min")
+                                    }
+                                    InfoCard("Ingredients") {
+                                        val ing=draft.optJSONArray("ingredients")?:JSONArray()
+                                        if(ing.length()==0) Text("No ingredients provided; review before saving.")
+                                        for(i in 0 until ing.length()) {
+                                            val ingredient=ing.opt(i)
+                                            val description=if(ingredient is JSONObject)
+                                                ingredient.s("raw").ifBlank{ingredient.s("name")}
+                                                else ingredient.toString()
+                                            Text("• "+description,
+                                                modifier=Modifier.padding(vertical=3.dp))
                                         }
-                                    }) { Column(Modifier.fillMaxWidth().padding(16.dp)){
-                                        Text(item.s("title").ifBlank{item.s("name")},fontWeight=FontWeight.Bold)
-                                        Text(item.s("description"),maxLines=2)
-                                        Text("View recipe",color=pine)
-                                    }}
+                                    }
+                                    InfoCard("Directions") {
+                                        val steps=draft.optJSONArray("instructions")?:JSONArray()
+                                        if(steps.length()==0) Text("No directions provided; review before saving.")
+                                        for(i in 0 until steps.length()){
+                                            Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                                                Text("${i+1}.",color=pine,fontWeight=FontWeight.Bold)
+                                                Text(steps.optString(i),Modifier.weight(1f))
+                                            }
+                                        }
+                                    }
+                                    Text("Nothing is saved until you review and save this recipe.",
+                                        style=MaterialTheme.typography.bodySmall,color=pine)
+                                    Button(onClick={
+                                        discoveredRecipe=null
+                                        openEditor(draft)
+                                    },modifier=Modifier.fillMaxWidth()){Text("Import and review recipe")}
+                                    OutlinedButton(onClick={page="Discover"},
+                                        modifier=Modifier.fillMaxWidth()){Text("Back to results")}
                                 }
                             }
                         }
