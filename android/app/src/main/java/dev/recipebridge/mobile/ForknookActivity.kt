@@ -335,6 +335,12 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
     var payload by remember { mutableStateOf<Any?>(null) }
     var recipes by remember { mutableStateOf(JSONArray()) }
     var categories by remember { mutableStateOf(JSONArray()) }
+    var folders by remember { mutableStateOf(JSONArray()) }
+    var folderFilter by remember { mutableStateOf("all") }
+    var categoryFilter by remember { mutableStateOf("all") }
+    var manageFolders by remember { mutableStateOf(false) }
+    var folderNameInput by remember { mutableStateOf("") }
+    var selectedFolderId by remember { mutableIntStateOf(0) }
     var nonce by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
@@ -381,6 +387,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                 user = api.call("/auth/me").asObject()
                 recipes = api.call("/recipes").asArray()
                 categories = api.call("/categories").asArray()
+                folders = api.call("/folders").asArray()
             } catch (e: Exception) {
                 message = e.message.orEmpty()
                 if (message.contains("401") || message.contains("403")) signOut()
@@ -392,6 +399,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
             try {
                 recipes = api.call("/recipes").asArray()
                 categories = api.call("/categories").asArray()
+                folders = api.call("/folders").asArray()
             } catch (e: Exception) { message = e.message.orEmpty() }
         }
     }
@@ -603,6 +611,60 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                         Text(message,modifier=Modifier.padding(12.dp),color=Color(0xFF883C28))
                     }
                     if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if(manageFolders) {
+                        AlertDialog(
+                            onDismissRequest={manageFolders=false;selectedFolderId=0},
+                            title={Text("Organize folders")},
+                            text={
+                                Column(Modifier.verticalScroll(rememberScrollState()),
+                                    verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    Text("Folders make recipes easy to find. Recipes stay safe if you delete a folder.",
+                                        style=MaterialTheme.typography.bodySmall)
+                                    folders.objects().forEach { folder ->
+                                        FilterChip(
+                                            selected=selectedFolderId==folder.optInt("id"),
+                                            onClick={
+                                                selectedFolderId=folder.optInt("id")
+                                                folderNameInput=folder.s("name")
+                                            },
+                                            label={Text(folder.s("name")+" ("+folder.optInt("recipe_count")+")")}
+                                        )
+                                    }
+                                    OutlinedTextField(value=folderNameInput,
+                                        onValueChange={folderNameInput=it},
+                                        label={Text(if(selectedFolderId>0)"Folder name" else "New folder name")},
+                                        singleLine=true,modifier=Modifier.fillMaxWidth())
+                                    if(selectedFolderId>0) {
+                                        OutlinedButton(onClick={
+                                            request("/folders/"+selectedFolderId,"DELETE"){ refresh() }
+                                            selectedFolderId=0;folderNameInput=""
+                                        },enabled=!busy){Text("Delete selected folder (keep recipes)")}
+                                        TextButton(onClick={selectedFolderId=0;folderNameInput=""}){
+                                            Text("Create a new folder instead")
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton={
+                                TextButton(onClick={
+                                    if(folderNameInput.isNotBlank()){
+                                        val id=selectedFolderId
+                                        request(if(id>0) "/folders/"+id else "/folders",
+                                            if(id>0)"PUT" else "POST",
+                                            JSONObject().put("name",folderNameInput.trim())) {
+                                            refresh()
+                                        }
+                                        selectedFolderId=0;folderNameInput="";manageFolders=false
+                                    }
+                                },enabled=folderNameInput.isNotBlank()&&!busy){
+                                    Text(if(selectedFolderId>0)"Rename" else "Create folder")
+                                }
+                            },
+                            dismissButton={TextButton(onClick={manageFolders=false;selectedFolderId=0}){
+                                Text("Close")
+                            }}
+                        )
+                    }
                     when(page) {
                         "Share" -> {
                             Column(
@@ -643,9 +705,35 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                         "Recipes" -> {
                             OutlinedTextField(search,{search=it},label={Text("Search family recipes")},
                                 modifier=Modifier.fillMaxWidth(),singleLine=true)
+                            Row(Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement=Arrangement.spacedBy(7.dp)) {
+                                FilterChip(selected=folderFilter=="all",
+                                    onClick={folderFilter="all"},label={Text("All folders")})
+                                FilterChip(selected=folderFilter=="none",
+                                    onClick={folderFilter="none"},label={Text("Not in a folder")})
+                                folders.objects().forEach { folder ->
+                                    val id=folder.optInt("id").toString()
+                                    FilterChip(selected=folderFilter==id,
+                                        onClick={folderFilter=id},
+                                        label={Text("📁 "+folder.s("name"))})
+                                }
+                            }
+                            Row(Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement=Arrangement.spacedBy(7.dp)) {
+                                FilterChip(selected=categoryFilter=="all",
+                                    onClick={categoryFilter="all"},label={Text("All categories")})
+                                categories.objects().forEach { cat ->
+                                    val id=cat.optInt("id").toString()
+                                    FilterChip(selected=categoryFilter==id,
+                                        onClick={categoryFilter=id},label={Text(cat.s("name"))})
+                                }
+                            }
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                                 if(canEdit) Button(onClick={openEditor()}){Text("New recipe")}
                                 if(canEdit) OutlinedButton(onClick={page="Import"}){Text("Import")}
+                                if(canApprove) OutlinedButton(onClick={
+                                    folderNameInput="";selectedFolderId=0;manageFolders=true
+                                }){Text("Folders")}
                                 if(selection.isNotEmpty()) OutlinedButton(onClick={
                                     request("/shopping-lists/build","POST",
                                         JSONObject().put("recipe_ids",JSONArray(selection.toList()))
@@ -654,8 +742,14 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                     }
                                 }){Text("Shop ("+selection.size+")")}
                             }
-                            val filtered=recipes.objects().filter { (it.s("title")+" "+it.s("description"))
-                                .contains(search,ignoreCase=true) }
+                            val filtered=recipes.objects().filter { recipe ->
+                                val group=recipe.optJSONArray("folder_ids")?:JSONArray()
+                                val ids=(0 until group.length()).map{group.optInt(it)}
+                                (recipe.s("title")+" "+recipe.s("description")).contains(search,ignoreCase=true) &&
+                                (categoryFilter=="all" || recipe.optInt("category_id")==categoryFilter.toIntOrNull()) &&
+                                (folderFilter=="all" || (folderFilter=="none" && ids.isEmpty()) ||
+                                  (folderFilter.toIntOrNull()?.let{it in ids}==true))
+                            }
                             LazyColumn(verticalArrangement=Arrangement.spacedBy(10.dp),
                                 contentPadding=PaddingValues(bottom=12.dp)) {
                                 items(filtered,key={it.optInt("id")}) { recipe ->
@@ -688,6 +782,14 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                     Modifier.fillMaxWidth().height(250.dp))
                                 Text(r.s("title"),style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
                                 if(r.s("description").isNotBlank()) Text(r.s("description"))
+                                val assignedFolders=(r.optJSONArray("folder_ids")?:JSONArray())
+                                val assignedNames=(0 until assignedFolders.length()).mapNotNull { i ->
+                                    val id=assignedFolders.optInt(i)
+                                    folders.objects().firstOrNull{it.optInt("id")==id}?.s("name")
+                                }
+                                if(assignedNames.isNotEmpty()) InfoCard("Folders") {
+                                    Text(assignedNames.joinToString(" · "))
+                                }
                                 Row(horizontalArrangement=Arrangement.spacedBy(7.dp)) {
                                     if(canEdit) OutlinedButton(onClick={openEditor(r)}){Text("Edit")}
                                     OutlinedButton(onClick={ request("/recipes/"+r.optInt("id")+"/state","PUT",
@@ -737,12 +839,48 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                             var editSteps by remember(editing){mutableStateOf((draft.optJSONArray("instructions")?:JSONArray())
                                 .let{a->(0 until a.length()).joinToString("\n"){a.optString(it)}})}
                             var editNotes by remember(editing){mutableStateOf(draft.s("notes"))}
+                            var editCategory by remember(editing) {
+                                mutableIntStateOf(draft.optInt("category_id",0))
+                            }
+                            var editFolderIds by remember(editing) {
+                                val ids=draft.optJSONArray("folder_ids")?:JSONArray()
+                                mutableStateOf((0 until ids.length()).map{ids.optInt(it)}.toSet())
+                            }
                             Column(Modifier.verticalScroll(rememberScrollState()),
                                 verticalArrangement=Arrangement.spacedBy(10.dp)) {
                                 Text("Review your recipe before saving",
                                     style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
                                 Input(editTitle,{editTitle=it},"Recipe name")
                                 Input(editDesc,{editDesc=it},"Description",true)
+                                Text("Category",fontWeight=FontWeight.Bold)
+                                Row(Modifier.horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                    FilterChip(selected=editCategory==0,
+                                        onClick={editCategory=0},label={Text("Uncategorized")})
+                                    categories.objects().forEach{cat->
+                                        val id=cat.optInt("id")
+                                        FilterChip(selected=editCategory==id,
+                                            onClick={editCategory=id},label={Text(cat.s("name"))})
+                                    }
+                                }
+                                Text("Folders (choose any)",fontWeight=FontWeight.Bold)
+                                if(folders.length()==0)
+                                    Text("No folders yet. A family approver can create one from Recipes.",
+                                        style=MaterialTheme.typography.bodySmall)
+                                Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                                    folders.objects().forEach{folder->
+                                        val id=folder.optInt("id")
+                                        Row(verticalAlignment=Alignment.CenterVertically) {
+                                            Checkbox(checked=id in editFolderIds,
+                                                onCheckedChange={yes->
+                                                    editFolderIds=if(yes)editFolderIds+id else editFolderIds-id
+                                                })
+                                            Text(folder.s("name"),modifier=Modifier.clickable {
+                                                editFolderIds=if(id in editFolderIds)editFolderIds-id else editFolderIds+id
+                                            })
+                                        }
+                                    }
+                                }
                                 Input(editIng,{editIng=it},"Ingredients, one per line",true)
                                 Input(editSteps,{editSteps=it},"Instructions, one step per line",true)
                                 Input(editPhoto,{editPhoto=it},"Photo URL")
@@ -766,6 +904,8 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                     obj.put("description",editDesc)
                                     obj.put("image_url",editPhoto)
                                     obj.put("notes",editNotes)
+                                    obj.put("category_id",if(editCategory>0)editCategory else JSONObject.NULL)
+                                    obj.put("folder_ids",JSONArray(editFolderIds.toList()))
                                     obj.put("ingredients",JSONArray().apply{editIng.lines().filter{it.isNotBlank()}
                                         .forEach{put(JSONObject().put("raw",it.trim()).put("name",it.trim()))}})
                                     obj.put("instructions",JSONArray().apply{editSteps.lines().filter{it.isNotBlank()}
