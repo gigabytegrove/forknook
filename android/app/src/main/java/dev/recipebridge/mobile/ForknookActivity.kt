@@ -270,16 +270,21 @@ private fun RecipePhoto(api: RecipeCoveApi, image: String, modifier: Modifier = 
         )
     } else {
         // Local photos are private and require the signed-in user's bearer token.
-        val bitmap by produceState<Bitmap?>(null, api.origin, image, api.token) {
-            value = api.photo(image)
+        val result by produceState<Pair<Boolean,Bitmap?>>(false to null, api.origin, image, api.token) {
+            value = true to api.photo(image)
         }
-        if (bitmap != null) {
-            Image(bitmap!!.asImageBitmap(), contentDescription = "Recipe photograph",
+        if (result.second != null) {
+            Image(result.second!!.asImageBitmap(), contentDescription = "Recipe photograph",
                 modifier = modifier, contentScale = ContentScale.Crop)
         } else {
             Box(modifier, contentAlignment = Alignment.Center) {
-                Text(if (image.isBlank()) "No photograph available" else "Photograph unavailable",
-                    style = MaterialTheme.typography.bodySmall)
+                if(image.isBlank()) {
+                    Text("🍲",style=MaterialTheme.typography.headlineLarge)
+                } else if(!result.first) {
+                    CircularProgressIndicator(modifier=Modifier.size(24.dp),strokeWidth=2.dp)
+                } else {
+                    Text("Photograph unavailable", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
@@ -974,6 +979,7 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                                     draft.put("image_url",item.s("image_url"))
                                                 if(draft.s("title").isBlank())draft.put("title",item.s("title"))
                                                 if(draft.s("source_url").isBlank())draft.put("source_url",item.s("source_url"))
+                                                if(draft.s("image_url").isNotBlank())item.put("image_url",draft.s("image_url"))
                                                 discoveredRecipe=draft
                                                 page="Discover recipe"
                                             }
