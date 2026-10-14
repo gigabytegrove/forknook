@@ -969,7 +969,12 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                             val resultProvider=item.s("provider").ifBlank { discoverProvider }
                                             request("/discovery/preview?provider="+params(resultProvider)+
                                                 "&id="+params(item.s("id"))) { response ->
-                                                discoveredRecipe=response.asObject()
+                                                val draft=response.asObject()
+                                                if(draft.s("image_url").isBlank() && item.s("image_url").isNotBlank())
+                                                    draft.put("image_url",item.s("image_url"))
+                                                if(draft.s("title").isBlank())draft.put("title",item.s("title"))
+                                                if(draft.s("source_url").isBlank())draft.put("source_url",item.s("source_url"))
+                                                discoveredRecipe=draft
                                                 page="Discover recipe"
                                             }
                                         },
@@ -1014,6 +1019,22 @@ private fun RecipeCoveApp(activity: RecipeCoveActivity) {
                                         fontWeight=FontWeight.Bold)
                                     if(draft.s("description").isNotBlank())
                                         Text(draft.s("description"))
+                                    if(draft.s("preview_notice").isNotBlank() || draft.optBoolean("requires_manual_review")) {
+                                        InfoCard("Review this recipe carefully") {
+                                            Text(draft.s("preview_notice").ifBlank {
+                                                "This source may be missing ingredients or directions. Check the original recipe before saving."
+                                            })
+                                        }
+                                    }
+                                    if(draft.s("source_url").startsWith("https://")) {
+                                        OutlinedButton(
+                                            onClick={
+                                                val url=Uri.parse(draft.s("source_url"))
+                                                activity.startActivity(Intent(Intent.ACTION_VIEW,url))
+                                            },
+                                            modifier=Modifier.fillMaxWidth()
+                                        ){Text("Open original recipe website")}
+                                    }
                                     Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                                         if(draft.s("servings").isNotBlank())
                                             Text("Servings: "+draft.s("servings"))
